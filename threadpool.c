@@ -23,7 +23,9 @@ static struct thread_pool {
 static struct future {
 	fork_join_task_t task;		/* Task */
 	void * data;				/* Argument for the task */
+	void * result;				/* Result of the task */
 	pthread_mutex_t mutex;		/* Mutex */
+	int runState; 			/* Represents the state the future is in  by number */
 	//sem_t sem;
 }
 	
