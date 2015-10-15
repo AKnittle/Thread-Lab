@@ -32,6 +32,18 @@ static struct future {
 	//sem_t sem;
 };
 
+//---------------------------------------------------------------------------------
+//ANDREW (10/15/15; 2:45)
+/*
+ * Struct for holding all the info needed for a created thread. As of now it holds just
+ * the worker id, and the actual thread (worker) doing the work
+ */
+static struct thread_local_info {
+	int worker_id;		// Id number for the thread
+	pthread_t thread;	// The thread actually doing the work
+};
+//---------------------------------------------------------------------------------
+
 /* 
  * Forward declaration of worker threads
  */
