@@ -3,7 +3,8 @@
  *
  * A work-stealing, fork-join thread pool.
  */
- 
+
+#include <stdlib.h>
 #include <pthread.h>
 #include <smaphore.h>
 #include "list.h"
@@ -13,11 +14,13 @@
  * types will be local to your threadpool.c implementation.
  */
 static struct thread_pool {
+	int N;						/* Number of workers in the threadpool */
 	pthread_mutex_t lock;		/* Mutex for the threadpool*/
-	struct list queue;			/* Global task list */
+	struct list deque;			/* Global task list */
+	pthread_t *threads;			/* An array of worker threads' tids */
 	sem_t semaphore;			/* Semaphore fo the threadpool */
 	/* Additional menbers may be needed */
-}
+};
 
 
 static struct future {
@@ -25,13 +28,43 @@ static struct future {
 	void * data;				/* Argument for the task */
 	void * result;				/* Result of the task */
 	pthread_mutex_t mutex;		/* Mutex */
-	int runState; 			/* Represents the state the future is in  by number */
+	int runState; 				/* Represents the state the future is in  by number */
 	//sem_t sem;
-}
+};
+
+/* 
+ * Forward declaration of worker threads
+ */
+static void *worker(void *vargp);
 	
 
 /* Create a new thread pool with no more than n threads. */
-struct thread_pool * thread_pool_new(int nthreads);
+struct thread_pool * thread_pool_new(int nthreads)
+{
+	/* Creating a new thread pool */
+	struct thread_pool *pool = malloc(sizeof *pool);
+	
+	/* Initializing its menbers */
+	pool->N = nthreads;
+	pool->threads = malloc(sizeof(pthread_t) * nthreads);	
+	pool->lock = PTHREAD_MUTEX_INITIALIZER;
+	sem_init(&pool->semaphore, 0, 0);
+	list_init(&pool->deque);
+	
+	/* Spwan the worker threads */
+	for (int i = 0; i < nthreads; i++) {
+		pthread_create(threads + i, NULL, worker, NULL);
+	}
+	
+	return pool;
+}
+
+/*
+ * The thread function for each worker */ 
+static void *worker(void *vargp)
+{
+	struct list queue; 				// Task list inside each worker thread
+}
 
 /* 
  * Shutdown this thread pool in an orderly fashion.  
@@ -40,18 +73,10 @@ struct thread_pool * thread_pool_new(int nthreads);
  *
  * Deallocate the thread pool object before returning. 
  */
-void thread_pool_shutdown_and_destroy(struct thread_pool *);
+void thread_pool_shutdown_and_destroy(struct thread_pool *)
+{
+}
 
-/* A function pointer representing a 'fork/join' task.
- * Tasks are represented as a function pointer to a
- * function.
- * 'pool' - the thread pool instance in which this task
- *          executes
- * 'data' - a pointer to the data provided in thread_pool_submit
- *
- * Returns the result of its computation.
- */
-typedef void * (* fork_join_task_t) (struct thread_pool *pool, void * data);
 
 /* 
  * Submit a fork join task to the thread pool and return a
@@ -66,19 +91,26 @@ typedef void * (* fork_join_task_t) (struct thread_pool *pool, void * data);
 struct future * thread_pool_submit(
         struct thread_pool *pool, 
         fork_join_task_t task, 
-        void * data);
+        void * data)
+{
+	return NULL;
+}
 
 /* Make sure that the thread pool has completed the execution
  * of the fork join task this future represents.
  *
  * Returns the value returned by this task.
  */
-void * future_get(struct future *);
+void * future_get(struct future *)
+{
+}
 
 /* Deallocate this future.  Must be called after future_get() */
-void future_free(struct future *);
+void future_free(struct future *)
+{
+}
 
 /* Helper function checking all workers to see whether they are busy */
-static int 
+//static int 
 
 
