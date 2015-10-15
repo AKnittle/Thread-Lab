@@ -71,6 +71,18 @@ struct thread_pool * thread_pool_new(int nthreads)
 	return pool;
 }
 
+//------------------------------------------------------------------------------
+// Andrew Knittle (10/15/15; 4:00)
+/*
+ * Helper method for threads that helps determine what tasks, or "jobs", to work
+ * on. Looks for jobs by stealing jobs, looking for jobs in queue or global queue,
+ * or simply sleeps until a job is avaible.
+ */
+static void thread_helper()
+{
+	// NOTE: THIS METHOD MUST BE UPDATED. MOST CODE ARE PLACEHOLDERS 
+}
+
 /*
  * The thread function for each worker */ 
 static void *worker(void *vargp)
