@@ -17,7 +17,8 @@ static struct thread_pool {
 	int N;						/* Number of workers in the threadpool */
 	pthread_mutex_t lock;		/* Mutex for the threadpool*/
 	struct list deque;			/* Global task list */
-	pthread_t *threads;			/* An array of worker threads' tids */
+	//pthread_t *threads;			/* An array of worker threads' tids */
+	struct thread_local_info *thread_info; /* An array of worker threads' info */
 	sem_t semaphore;			/* Semaphore fo the threadpool */
 	/* Additional menbers may be needed */
 };
@@ -41,8 +42,11 @@ static struct future {
 static struct thread_local_info {
 	int worker_id;		// Id number for the thread
 	pthread_t thread;	// The thread actually doing the work
+	struct list queue;	// The local task list of the thread
 };
 //---------------------------------------------------------------------------------
+
+static __thread struct thread_local_info *current_thread_info = NULL;
 
 /* 
  * Forward declaration of worker threads
@@ -57,15 +61,18 @@ struct thread_pool * thread_pool_new(int nthreads)
 	struct thread_pool *pool = malloc(sizeof *pool);
 	
 	/* Initializing its menbers */
+	thread_info = malloc(nthreads * sizeof(struct thread_local_info) );
 	pool->N = nthreads;
-	pool->threads = malloc(sizeof(pthread_t) * nthreads);	
 	pool->lock = PTHREAD_MUTEX_INITIALIZER;
 	sem_init(&pool->semaphore, 0, 0);
 	list_init(&pool->deque);
 	
 	/* Spwan the worker threads */
 	for (int i = 0; i < nthreads; i++) {
-		pthread_create(threads + i, NULL, worker, NULL);
+		thread_info[i].worker_id = i + 1;
+		list_init(&thread_info[i].queue);
+		pthread_create(&thread_info[i].thread, NULL, worker, &thread_info[i]);
+		
 	}
 	
 	return pool;
@@ -87,7 +94,9 @@ static void thread_helper()
  * The thread function for each worker */ 
 static void *worker(void *vargp)
 {
-	struct list queue; 				// Task list inside each worker thread
+	current_thread_info = (struct thread_local_info *)vargp;
+	thread_helper();
+	return NULL;
 }
 
 /* 
