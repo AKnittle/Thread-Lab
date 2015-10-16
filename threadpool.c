@@ -16,10 +16,11 @@
 static struct thread_pool {
 	int N;						/* Number of workers in the threadpool */
 	pthread_mutex_t lock;		/* Mutex for the threadpool*/
-	struct list deque;			/* Global task list */
+	struct list subdeque;			/* Global task list */
 	//pthread_t *threads;			/* An array of worker threads' tids */
 	struct thread_local_info *thread_info; /* An array of worker threads' info */
 	sem_t semaphore;			/* Semaphore fo the threadpool */
+	int is_shutdown;			/* A flag to denote when the threadpool is shut down */
 	/* Additional menbers may be needed */
 };
 
@@ -30,6 +31,7 @@ static struct future {
 	void * result;				/* Result of the task */
 	pthread_mutex_t mutex;		/* Mutex */
 	int runState; 				/* Represents the state the future is in  by number */
+	struct list_elem elem;   	/* Link element for the list */
 	//sem_t sem;
 };
 
@@ -42,7 +44,7 @@ static struct future {
 static struct thread_local_info {
 	int worker_id;		// Id number for the thread
 	pthread_t thread;	// The thread actually doing the work
-	struct list queue;	// The local task list of the thread
+	struct list workerqueue;	// The local task list of the thread
 };
 //---------------------------------------------------------------------------------
 
@@ -65,14 +67,13 @@ struct thread_pool * thread_pool_new(int nthreads)
 	pool->N = nthreads;
 	pool->lock = PTHREAD_MUTEX_INITIALIZER;
 	sem_init(&pool->semaphore, 0, 0);
-	list_init(&pool->deque);
+	list_init(&pool->subdeque);
 	
 	/* Spwan the worker threads */
 	for (int i = 0; i < nthreads; i++) {
 		thread_info[i].worker_id = i + 1;
-		list_init(&thread_info[i].queue);
-		pthread_create(&thread_info[i].thread, NULL, worker, &thread_info[i]);
-		
+		list_init(&thread_info[i].workerqueue);
+		pthread_create(&thread_info[i].thread, NULL, worker, &thread_info[i]);		
 	}
 	
 	return pool;
@@ -126,7 +127,22 @@ struct future * thread_pool_submit(
         fork_join_task_t task, 
         void * data)
 {
-	return NULL;
+	pthread_t tid = pthread_self();
+	/* Allocating a new Future struct for the task */
+	struct future *newFuture = malloc(sizeof *newFuture);
+	
+	/* Initialzing the menbers of the Future */
+	newFuture->task = task;
+	newFuture->data = data;
+	newFuture->result = NULL;
+	newFuture->mutex = PTHREAD_MUTEX_INITIALIZER;
+	newFuture->runState = 0;			// State 0 represents that the task has not been excuted yet
+	&newFuture->elem = malloc(sizeof *elem);
+	
+	/* Push the future into the global deque */
+	list_push_back(&pool->subdeque, &newFuture->elem);
+	
+	return newFuture;
 }
 
 /* Make sure that the thread pool has completed the execution
