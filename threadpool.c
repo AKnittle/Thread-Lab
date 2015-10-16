@@ -45,6 +45,7 @@ static struct thread_local_info {
 	int worker_id;		// Id number for the thread
 	pthread_t thread;	// The thread actually doing the work
 	struct list workerqueue;	// The local task list of the thread
+	int worker_state;			// 0 represents worker is sleeping, 1 represents the worker is busy
 };
 //---------------------------------------------------------------------------------
 
@@ -71,9 +72,9 @@ struct thread_pool * thread_pool_new(int nthreads)
 	
 	/* Spwan the worker threads */
 	for (int i = 0; i < nthreads; i++) {
-		thread_info[i].worker_id = i + 1;
-		list_init(&thread_info[i].workerqueue);
-		pthread_create(&thread_info[i].thread, NULL, worker, &thread_info[i]);		
+		pool->thread_info[i].worker_id = i + 1;
+		list_init(&pool->thread_info[i].workerqueue);
+		pthread_create(&pool->thread_info[i].thread, NULL, worker, &pool->thread_info[i]);		
 	}
 	
 	return pool;
@@ -126,8 +127,7 @@ struct future * thread_pool_submit(
         struct thread_pool *pool, 
         fork_join_task_t task, 
         void * data)
-{
-	pthread_t tid = pthread_self();
+{	
 	/* Allocating a new Future struct for the task */
 	struct future *newFuture = malloc(sizeof *newFuture);
 	
@@ -139,8 +139,61 @@ struct future * thread_pool_submit(
 	newFuture->runState = 0;			// State 0 represents that the task has not been excuted yet
 	&newFuture->elem = malloc(sizeof *elem);
 	
-	/* Push the future into the global deque */
-	list_push_back(&pool->subdeque, &newFuture->elem);
+	/* If current thread is the main thread, submit the task to global deque */
+	if (current_thread_info == NULL) {
+	
+		/* Push the future into the global deque */
+		list_push_back(&pool->subdeque, &newFuture->elem);
+	}
+	/* Otherwise submit the task to a random sleeping worker, if all workers are busy then submit 
+	 * to a random workers queue */
+	else {
+		int count;
+		if (pool->N == 1) 									// The case when there is only one thread
+		{
+			list_push_back(&current_thread_info->workerqueue, &newFuture->elem);
+		}
+		else if (current_thread_info->worker_id == pool->N) // Current worker is the last worker in the pool
+		{
+			count = 1;
+			while (count != current_thread_info->worker_id) {
+				if (pool->thread_info[count].worker_state == 0)
+				{
+					// Submit the task to this sleeping worker
+					list_push_back(&pool->thread_info[count].workerqueue, &newFuture->elem);
+					break;
+				}
+				count++;				
+			}
+			list_push_back(&pool->thread_info[count - 1].workerqueue, &newFuture->elem);			
+		}
+		else 											
+		// Current worker is not the last worker than search starting from the next worker.
+		{
+			count = current_thread_info->worker_id + 1;
+			while (count <= pool->N && count != current_thread_info->worker_id) {
+				if (count > pool->N) count = 0;
+				if (pool->thread_info[count].worker_state == 0)
+				{
+					// Submit the task to this sleeping worker
+					list_push_back(&pool->thread_info[count].workerqueue, &newFuture->elem);
+					break;
+				}
+				count++;				
+			}
+			count = 1;
+			while (count != current_thread_info->worker_id) {
+				if (pool->thread_info[count].worker_state == 0)
+				{
+					// Submit the task to this sleeping worker
+					list_push_back(&pool->thread_info[count].workerqueue, &newFuture->elem);
+					break;
+				}
+				count++;				
+			}
+			list_push_back(&pool->thread_info[count - 1].workerqueue, &newFuture->elem);
+		}			
+	}
 	
 	return newFuture;
 }
