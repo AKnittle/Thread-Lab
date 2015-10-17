@@ -145,6 +145,32 @@ static void *worker(void *vargp)
  */
 void thread_pool_shutdown_and_destroy(struct thread_pool *)
 {
+//---------------------------------------------------------
+//Andrew Knittle (4:20)
+	/*Order in how to stop things:
+	 *	1.) Stop the workers and free all futures
+	 *	2.) free all workers
+	 *	3.) Once all the workers have been freed start
+	 *	freeing the threadpool struct
+	 *	4.) Everything has been freed so we can exit 
+	 */
+	int totalThreads = pool->N;
+	// Go through all the threads
+	for (int i = 0; i < totalThreads; i++)
+	{		
+		//Free all futures still in the worker's local
+		//job queue.
+		while(!list_empty(&pool->thread_info[i].wokerqueue))
+		{
+			//pop off elements at the back and repeat
+			//until empty
+			struct future *oldTask =list_entry(list_pop_back(&pool->thread_info[i].wokerqueue), struct future, elem);
+			// call future free to destroy the future
+			future_free(elemTask);
+		}
+	}
+		
+//---------------------------------------------------------
 }
 
 
@@ -235,6 +261,15 @@ void * future_get(struct future *)
 /* Deallocate this future.  Must be called after future_get() */
 void future_free(struct future *)
 {
+//-------------------------------------------------------------
+//Andrew Knittle (4:30)
+/*
+ * NOTE: Should be called when 
+ * 	a task has been completed
+ * 	and when the threadpool is told to stop
+ */
+
+//-------------------------------------------------------------
 }
 
 /* Helper function checking all workers to see whether they are busy */
