@@ -273,12 +273,16 @@ void future_free(struct future *)
 {
 //-------------------------------------------------------------
 //Andrew Knittle (4:30)
-/*
- * NOTE: Should be called when 
- * 	a task has been completed
- * 	and when the threadpool is told to stop
- */
-
+	/*
+	 * NOTE: Should be called when 
+	 * 	a task has been completed
+	 * 	and when the threadpool is told to stop
+	 */
+	struct future *oldFuture = future;
+	// free the elem
+	free(&oldFuture->elem);
+	// free the future
+	free(oldFuture);
 //-------------------------------------------------------------
 }
 
