@@ -166,10 +166,20 @@ void thread_pool_shutdown_and_destroy(struct thread_pool *)
 			//until empty
 			struct future *oldTask =list_entry(list_pop_back(&pool->thread_info[i].wokerqueue), struct future, elem);
 			// call future free to destroy the future
-			future_free(elemTask);
+			future_free(oldTask);
 		}
+		// all futures freed
+		// free the worker
+		free(pool->threadinfo[i]);
 	}
-		
+	// All workers freed
+	// free the worker list
+	free(pool->threadinfo);
+	// All that's left is the pool.
+	free(pool);
+	// All the memory allocated has been freed so we
+	// can exit
+	exit(0);
 //---------------------------------------------------------
 }
 
