@@ -36,7 +36,7 @@ struct future{
 									1 represents the task is currently running,
 									2 represents the task already has a result aviliable */
 	struct list_elem elem;   	/* Link element for the list */
-	//sem_t sem;
+	sem_t signal;
 };
 
 /*
@@ -127,9 +127,13 @@ static void *thread_helper(struct thread_local_info * info)
 		}
 	}
 	// Strat executing the task function and put the result into the future
+	pthread_mutex_lock(&newTask->mutex);
 	fork_join_task_t task = newTask->task;
+	newTask->runState = 1;						// Set the runstate to be 1 when task is in progress
 	newTask->result = task(info->bigpool, newTask->data);
-	newTask->runState = 1;
+	newTask->runState = 2;						// Set the runstate to be 2 when the result is aviliable
+	sem_post(&newTask->signal);
+	pthread_mutex_unlock(&newTask->mutex);
 	return NULL;
 }
 
@@ -217,9 +221,10 @@ struct future * thread_pool_submit(
 	newFuture->task = task;
 	newFuture->data = data;
 	newFuture->result = NULL;
+	sem_init(&newFuture->signal, 0, 0);
 	newFuture->mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 	newFuture->runState = 0;			// State 0 represents that the task has not been excuted yet
-	&newFuture->elem = (malloc(sizeof newFuture->elem));
+	&newFuture->elem = (*list_elem)malloc(sizeof(list_elem));
 	
 	/* If current thread is the main thread, submit the task to global deque */
 	if (current_thread_info == NULL) {
@@ -234,11 +239,9 @@ struct future * thread_pool_submit(
 	else {
 		//int count;
 		//if (pool->N == 1) 									// The case when there is only one thread
-		{
-			pthread_mutex_lock(&current_thread_info->local_lock);
-			list_push_back(&current_thread_info->workerqueue, &newFuture->elem);
-			pthread_mutex_unlock(&current_thread_info->local_lock);
-		}
+		pthread_mutex_lock(&current_thread_info->local_lock);
+		list_push_back(&current_thread_info->workerqueue, &newFuture->elem);
+		pthread_mutex_unlock(&current_thread_info->local_lock);	
 		/*else if (current_thread_info->worker_id == pool->N) // Current worker is the last worker in the pool
 		{
 			count = 1;
@@ -270,6 +273,7 @@ struct future * thread_pool_submit(
 			list_push_back(&pool->thread_info[count + 1].workerqueue, &newFuture->elem);
 		}*/		
 	}
+	/* Signal the workers there is a future submitted */
 	sem_post(&pool->semaphore);
 	return newFuture;
 }
@@ -281,7 +285,9 @@ struct future * thread_pool_submit(
  */
 void * future_get(struct future * givenFuture)
 {
-	return NULL;
+	// NOTE: Needed to be changed
+	sem_wait(&givenFuture->signal);
+	return givenFuture->result;
 }
 
 /* Deallocate this future.  Must be called after future_get() */
