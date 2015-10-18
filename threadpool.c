@@ -14,7 +14,7 @@
  * Opaque forward declarations. The actual definitions of these 
  * types will be local to your threadpool.c implementation.
  */
-static struct thread_pool {
+struct thread_pool{
 	int N;						/* Number of workers in the threadpool */
 	pthread_mutex_t lock;		/* Mutex for the threadpool*/
 	struct list subdeque;			/* Global task list */
@@ -26,7 +26,7 @@ static struct thread_pool {
 };
 
 
-static struct future {
+struct future{
 	fork_join_task_t task;		/* Task function*/
 	void * data;				/* Argument for the task */
 	void * result;				/* Result of the task */
@@ -43,7 +43,7 @@ static struct future {
  * Struct for holding all the info needed for a created thread. As of now it holds just
  * the worker id, and the actual thread (worker) doing the work
  */
-static struct thread_local_info {
+struct thread_local_info{
 	int worker_id;					// Id number for the thread
 	pthread_t thread;				// The thread actually doing the work
 	struct list workerqueue;		// The local task list of the thread
