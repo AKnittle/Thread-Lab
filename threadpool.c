@@ -26,11 +26,14 @@ static struct thread_pool {
 
 
 static struct future {
-	fork_join_task_t task;		/* Task */
+	fork_join_task_t task;		/* Task function*/
 	void * data;				/* Argument for the task */
 	void * result;				/* Result of the task */
 	pthread_mutex_t mutex;		/* Mutex */
-	int runState; 				/* Represents the state the future is in  by number */
+	int runState; 				/* Represents the state the future is in  by number 
+									0 represents the task has not been executed,
+									1 represents the task is currently running,
+									2 represents the task already has a result aviliable */
 	struct list_elem elem;   	/* Link element for the list */
 	//sem_t sem;
 };
@@ -119,8 +122,11 @@ static void * thread_helper(struct thread_local_info * info)
 				}
 			}
 		}
-	}	
-	return future_get(newTask);
+	}
+	// Strat executing the task function and put the result into the future
+	fork_join_task_t task = newTask->task;
+	newTask->result = task(newTask->bigpool, newTask->data);
+	newTask->runState = 1;
 }
 
 /*
