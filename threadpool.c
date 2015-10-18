@@ -128,8 +128,10 @@ static void * thread_helper(struct thread_local_info * info)
 static void *worker(void *vargp)
 {
 	current_thread_info = (struct thread_local_info *)vargp;
-	while (1)
-		return thread_helper(current_thread_info);
+	while (1) {
+		sem_wait(&current_thread_info->bigpool->semaphore);
+		thread_helper(current_thread_info);
+	}
 	return NULL;
 }
 
@@ -253,7 +255,7 @@ struct future * thread_pool_submit(
 			list_push_back(&pool->thread_info[count + 1].workerqueue, &newFuture->elem);
 		}*/		
 	}
-	
+	sem_post(&semaphore);
 	return newFuture;
 }
 
@@ -264,10 +266,11 @@ struct future * thread_pool_submit(
  */
 void * future_get(struct future *)
 {
+	
 }
 
 /* Deallocate this future.  Must be called after future_get() */
-void future_free(struct future *)
+void future_free(struct future * )
 {
 	/*
 	 * NOTE: Should be called when 
