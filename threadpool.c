@@ -142,7 +142,7 @@ static void *worker(void *vargp)
  *
  * Deallocate the thread pool object before returning. 
  */
-void thread_pool_shutdown_and_destroy(struct thread_pool *)
+void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 {
 	/*Order in how to stop things:
 	 *	1.) Stop the workers and free all futures
@@ -157,17 +157,21 @@ void thread_pool_shutdown_and_destroy(struct thread_pool *)
 	{		
 		//Free all futures still in the worker's local
 		//job queue.
-		while(!list_empty(&pool->thread_info[i].wokerqueue))
+		/*while(!list_empty(&pool->thread_info[i].wokerqueue))
 		{
 			//pop off elements at the back and repeat
 			//until empty
 			struct future *oldTask =list_entry(list_pop_back(&pool->thread_info[i].wokerqueue), struct future, elem);
 			// call future free to destroy the future
-			future_free(oldTask);
+			free(oldTask);
 		}
+		*/
+
+		//Must now join all threads.
+		pthread_join(pool->thread_info[i], NULL);
 		// all futures freed
 		// free the worker
-		free(pool->threadinfo[i]);
+		//free(pool->threadinfo[i]);
 	}
 	// All workers freed
 	// free the worker list
@@ -270,12 +274,11 @@ void * future_get(struct future *)
 }
 
 /* Deallocate this future.  Must be called after future_get() */
-void future_free(struct future * )
+void future_free(struct future * oldFuture )
 {
 	/*
 	 * NOTE: Should be called when 
 	 * 	a task has been completed
-	 * 	and when the threadpool is told to stop
 	 */
 	struct future *oldFuture = future;
 	// free the elem
