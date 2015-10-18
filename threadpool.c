@@ -74,7 +74,8 @@ struct thread_pool * thread_pool_new(int nthreads)
 	list_init(&pool->subdeque);
 	
 	/* Spwan the worker threads */
-	for (int i = 0; i < nthreads; i++) {
+	int i = 0;
+	for (; i < nthreads; i++) {
 		pool->thread_info[i].worker_id = i + 1;
 		pool->thread_info[i].bigpool = pool;
 		pool->thread_info[i].local_lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
@@ -112,7 +113,8 @@ static void *thread_helper(struct thread_local_info * info)
 		
 		}
 	else { // Get task from one of other worker
-		for (int i = 1; i <= info->bigpool->N; i++) {
+		int i = 1;
+		for (; i <= info->bigpool->N; i++) {
 			// If it is not itself
 			if (i != info->worker_id) {
 				if (!list_empty(&info->bigpool->thread_info[i].workerqueue)) {
@@ -161,7 +163,8 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	 */
 	int totalThreads = pool->N;
 	// Go through all the threads
-	for (int i = 0; i < totalThreads; i++)
+	int i = 0;
+	for (; i < totalThreads; i++)
 	{		
 		//Free all futures still in the worker's local
 		//job queue.
@@ -216,7 +219,6 @@ struct future * thread_pool_submit(
 	newFuture->result = NULL;
 	newFuture->mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 	newFuture->runState = 0;			// State 0 represents that the task has not been excuted yet
-	newFuture->elem = NULL;
 	&newFuture->elem = (malloc(sizeof newFuture->elem));
 	
 	/* If current thread is the main thread, submit the task to global deque */
