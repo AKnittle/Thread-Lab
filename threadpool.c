@@ -6,8 +6,9 @@
 
 #include <stdlib.h>
 #include <pthread.h>
-#include <smaphore.h>
+#include <semaphore.h>
 #include "list.h"
+#include "threadpool.h"
 
 /* 
  * Opaque forward declarations. The actual definitions of these 
@@ -66,7 +67,7 @@ struct thread_pool * thread_pool_new(int nthreads)
 	struct thread_pool *pool = malloc(sizeof *pool);
 	
 	/* Initializing its menbers */
-	thread_info = malloc(nthreads * sizeof(struct thread_local_info) );
+	pool->thread_info = malloc(nthreads * sizeof(struct thread_local_info) );
 	pool->N = nthreads;
 	pool->lock = PTHREAD_MUTEX_INITIALIZER;
 	sem_init(&pool->semaphore, 0, 0);
@@ -272,7 +273,7 @@ struct future * thread_pool_submit(
  */
 void * future_get(struct future *)
 {
-	
+	return NULL;
 }
 
 /* Deallocate this future.  Must be called after future_get() */
