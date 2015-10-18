@@ -35,20 +35,18 @@ static struct future {
 	//sem_t sem;
 };
 
-//---------------------------------------------------------------------------------
-//ANDREW (10/15/15; 2:45)
 /*
  * Struct for holding all the info needed for a created thread. As of now it holds just
  * the worker id, and the actual thread (worker) doing the work
  */
 static struct thread_local_info {
-	int worker_id;		// Id number for the thread
-	pthread_t thread;	// The thread actually doing the work
-	struct list workerqueue;	// The local task list of the thread
-	int worker_state;			// 0 represents worker is sleeping, 1 represents the worker is busy
+	int worker_id;					// Id number for the thread
+	pthread_t thread;				// The thread actually doing the work
+	struct list workerqueue;		// The local task list of the thread
+	int worker_state;				// 0 represents worker is sleeping, 1 represents the worker is busy
 	struct thread_pool *bigpool;	// The threadpool that holds this thread
+	pthread_mutex_t local_lock;		// The local queue mutex
 };
-//---------------------------------------------------------------------------------
 
 static __thread struct thread_local_info *current_thread_info = NULL;
 
@@ -75,6 +73,7 @@ struct thread_pool * thread_pool_new(int nthreads)
 	for (int i = 0; i < nthreads; i++) {
 		pool->thread_info[i].worker_id = i + 1;
 		pool->thread_info[i].bigpool = pool;
+		pool->thread_info[i].local_lock = PTHREAD_MUTEX_INITIALIZER;
 		list_init(&pool->thread_info[i].workerqueue);		
 		pthread_create(&pool->thread_info[i].thread, NULL, worker, &pool->thread_info[i]);		
 	}
@@ -82,48 +81,46 @@ struct thread_pool * thread_pool_new(int nthreads)
 	return pool;
 }
 
-//------------------------------------------------------------------------------
-// Andrew Knittle (10/15/15; 4:00)
+
 /*
  * Helper method for threads that helps determine what tasks, or "jobs", to work
  * on. Looks for jobs by stealing jobs, looking for jobs in queue or global queue,
  * or simply sleeps until a job is avaible.
  */
-static void thread_helper(struct thread_local_info * info)
+static void * thread_helper(struct thread_local_info * info)
 {
-	// NOTE: THIS METHOD MUST BE UPDATED. MOST CODE ARE PLACEHOLDERS 
-	/* Check that worker's state first */
-	if (current_thread_info->worker_state == 0)
+	struct future *newTask;
+	// Pop from its own queue if there are tasks there
+	if (!list_empty(&info->workerqueue))
 	{
-		struct future *newTask;
-		if (!list_empty(&info->bigpool->subdeque)) {
-			//Get the task from the global queue if the global queue is not empty			
-			
-			// Lock the mutex
-			pthread_mutex_lock(&info->bigpool->lock);
-			
-			// Pop off the task from the global queue
-			newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);
-						
-			// push the task to the local queue and execute it
-			pthread_mutex_unlock(&info->bigpool->lock);
-			
-			// We need to call thread_pool_submit()
-		}
-		else {
-			// Searching for other workers and stealing tasks from other workers
-			
-			// Pop off the task from other worker
-			
-			// push the task to the local queue and execute it
-		}
-		// push the task to the local queue and execute it
-		pthread_mutex_lock(&newTask->mutex);
-		list_push_back(&info->workerqueue, newTask);
-		pthread_mutex_unlock(&newTask->mutex);
-		
+		pthread_mutex_lock(&info->local_lock);
+		newTask = list_entry(list_pop_back(&info->workerqueue), struct future, elem);
+		pthread_mutex_unlock(&info->local_lock);
 	}
+	
+	else if (!list_empty(&info->bigpool->subdeque)) {
+		//Get the task from the global queue if the global queue is not empty			
+			
+		// Lock the mutex
+		pthread_mutex_lock(&info->bigpool->lock);
+		newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);
+		pthread_mutex_unlock(&info->bigpool->lock);
 		
+		}
+	else { // Get task from one of other worker
+		for (int i = 1; i <= info->bigpool->N; i++) {
+			// If it is not itself
+			if (i != info->worker_id) {
+				if (!list_empty(&info->bigpool->thread_info[i]->workerqueue)) {
+					pthread_mutex_lock(&info->bigpool->thread_info[i]->local_lock);
+					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i]->workerqueue), struct future, elem);
+					pthread_mutex_unlock(&info->bigpool->thread_info[i]->local_lock);
+					break;
+				}
+			}
+		}
+	}	
+	return future_get(newTask);
 }
 
 /*
@@ -131,8 +128,8 @@ static void thread_helper(struct thread_local_info * info)
 static void *worker(void *vargp)
 {
 	current_thread_info = (struct thread_local_info *)vargp;
-	
-	thread_helper(current_thread_info);
+	while (1)
+		return thread_helper(current_thread_info);
 	return NULL;
 }
 
@@ -145,8 +142,6 @@ static void *worker(void *vargp)
  */
 void thread_pool_shutdown_and_destroy(struct thread_pool *)
 {
-//---------------------------------------------------------
-//Andrew Knittle (4:20)
 	/*Order in how to stop things:
 	 *	1.) Stop the workers and free all futures
 	 *	2.) free all workers
@@ -180,7 +175,6 @@ void thread_pool_shutdown_and_destroy(struct thread_pool *)
 	// All the memory allocated has been freed so we
 	// can exit
 	exit(0);
-//---------------------------------------------------------
 }
 
 
@@ -214,17 +208,21 @@ struct future * thread_pool_submit(
 	if (current_thread_info == NULL) {
 	
 		/* Push the future into the global deque */
+		pthread_mutex_lock(&pool->lock);
 		list_push_back(&pool->subdeque, &newFuture->elem);
+		pthread_mutex_unlock(&pool->lock);
 	}
 	/* Otherwise submit the task to a random sleeping worker, if all workers are busy then submit 
 	 * to a random workers queue */
 	else {
-		int count;
-		if (pool->N == 1) 									// The case when there is only one thread
+		//int count;
+		//if (pool->N == 1) 									// The case when there is only one thread
 		{
+			pthread_mutex_lock(&current_thread_info->local_lock);
 			list_push_back(&current_thread_info->workerqueue, &newFuture->elem);
+			pthread_mutex_unlock(&current_thread_info->local_lock);
 		}
-		else if (current_thread_info->worker_id == pool->N) // Current worker is the last worker in the pool
+		/*else if (current_thread_info->worker_id == pool->N) // Current worker is the last worker in the pool
 		{
 			count = 1;
 			while (count != current_thread_info->worker_id) {
@@ -253,7 +251,7 @@ struct future * thread_pool_submit(
 				count++;				
 			}
 			list_push_back(&pool->thread_info[count + 1].workerqueue, &newFuture->elem);
-		}			
+		}*/		
 	}
 	
 	return newFuture;
@@ -271,8 +269,6 @@ void * future_get(struct future *)
 /* Deallocate this future.  Must be called after future_get() */
 void future_free(struct future *)
 {
-//-------------------------------------------------------------
-//Andrew Knittle (4:30)
 	/*
 	 * NOTE: Should be called when 
 	 * 	a task has been completed
@@ -283,10 +279,6 @@ void future_free(struct future *)
 	free(&oldFuture->elem);
 	// free the future
 	free(oldFuture);
-//-------------------------------------------------------------
 }
-
-/* Helper function checking all workers to see whether they are busy */
-//static int 
 
 
