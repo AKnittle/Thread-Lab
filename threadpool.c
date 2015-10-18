@@ -69,7 +69,7 @@ struct thread_pool * thread_pool_new(int nthreads)
 	/* Initializing its menbers */
 	pool->thread_info = malloc(nthreads * sizeof(struct thread_local_info) );
 	pool->N = nthreads;
-	pool->lock = PTHREAD_MUTEX_INITIALIZER;
+	pool->lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 	sem_init(&pool->semaphore, 0, 0);
 	list_init(&pool->subdeque);
 	
@@ -77,7 +77,7 @@ struct thread_pool * thread_pool_new(int nthreads)
 	for (int i = 0; i < nthreads; i++) {
 		pool->thread_info[i].worker_id = i + 1;
 		pool->thread_info[i].bigpool = pool;
-		pool->thread_info[i].local_lock = PTHREAD_MUTEX_INITIALIZER;
+		pool->thread_info[i].local_lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 		list_init(&pool->thread_info[i].workerqueue);		
 		pthread_create(&pool->thread_info[i].thread, NULL, worker, &pool->thread_info[i]);		
 	}
@@ -91,7 +91,7 @@ struct thread_pool * thread_pool_new(int nthreads)
  * on. Looks for jobs by stealing jobs, looking for jobs in queue or global queue,
  * or simply sleeps until a job is avaible.
  */
-static void * thread_helper(struct thread_local_info * info)
+static void *thread_helper(struct thread_local_info * info)
 {
 	struct future *newTask;
 	// Pop from its own queue if there are tasks there
@@ -115,10 +115,10 @@ static void * thread_helper(struct thread_local_info * info)
 		for (int i = 1; i <= info->bigpool->N; i++) {
 			// If it is not itself
 			if (i != info->worker_id) {
-				if (!list_empty(&info->bigpool->thread_info[i]->workerqueue)) {
-					pthread_mutex_lock(&info->bigpool->thread_info[i]->local_lock);
-					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i]->workerqueue), struct future, elem);
-					pthread_mutex_unlock(&info->bigpool->thread_info[i]->local_lock);
+				if (!list_empty(&info->bigpool->thread_info[i].workerqueue)) {
+					pthread_mutex_lock(&info->bigpool->thread_info[i].local_lock);
+					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i].workerqueue), struct future, elem);
+					pthread_mutex_unlock(&info->bigpool->thread_info[i].local_lock);
 					break;
 				}
 			}
@@ -126,8 +126,9 @@ static void * thread_helper(struct thread_local_info * info)
 	}
 	// Strat executing the task function and put the result into the future
 	fork_join_task_t task = newTask->task;
-	newTask->result = task(newTask->bigpool, newTask->data);
+	newTask->result = task(info->bigpool, newTask->data);
 	newTask->runState = 1;
+	return NULL;
 }
 
 /*
@@ -182,7 +183,7 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	}
 	// All workers freed
 	// free the worker list
-	free(pool->threadinfo);
+	free(pool->thread_info);
 	// All that's left is the pool.
 	free(pool);
 	// All the memory allocated has been freed so we
@@ -213,9 +214,10 @@ struct future * thread_pool_submit(
 	newFuture->task = task;
 	newFuture->data = data;
 	newFuture->result = NULL;
-	newFuture->mutex = PTHREAD_MUTEX_INITIALIZER;
+	newFuture->mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 	newFuture->runState = 0;			// State 0 represents that the task has not been excuted yet
-	&newFuture->elem = malloc(sizeof *elem);
+	newFuture->elem = NULL;
+	&newFuture->elem = (malloc(sizeof newFuture->elem));
 	
 	/* If current thread is the main thread, submit the task to global deque */
 	if (current_thread_info == NULL) {
