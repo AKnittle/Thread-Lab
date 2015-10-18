@@ -175,7 +175,7 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 		*/
 
 		//Must now join all threads.
-		pthread_join(pool->thread_info[i], NULL);
+		pthread_join(pool->thread_info[i].thread, NULL);
 		// all futures freed
 		// free the worker
 		//free(pool->threadinfo[i]);
@@ -266,7 +266,7 @@ struct future * thread_pool_submit(
 			list_push_back(&pool->thread_info[count + 1].workerqueue, &newFuture->elem);
 		}*/		
 	}
-	sem_post(&semaphore);
+	sem_post(&pool->semaphore);
 	return newFuture;
 }
 
@@ -275,19 +275,19 @@ struct future * thread_pool_submit(
  *
  * Returns the value returned by this task.
  */
-void * future_get(struct future *)
+void * future_get(struct future * givenFuture)
 {
 	return NULL;
 }
 
 /* Deallocate this future.  Must be called after future_get() */
-void future_free(struct future * oldFuture )
+void future_free(struct future * givenFuture)
 {
 	/*
 	 * NOTE: Should be called when 
 	 * 	a task has been completed
 	 */
-	struct future *oldFuture = future;
+	struct future *oldFuture = givenFuture;
 	// free the elem
 	free(&oldFuture->elem);
 	// free the future
