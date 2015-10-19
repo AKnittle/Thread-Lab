@@ -53,6 +53,7 @@ struct thread_local_info{
 };
 
 static __thread struct thread_local_info *current_thread_info = NULL;
+static bool check_workers(struct future *);
 
 /* 
  * Forward declaration of worker threads
@@ -129,11 +130,11 @@ static void *thread_helper(struct thread_local_info * info)
 	// Strat executing the task function and put the result into the future
 	pthread_mutex_lock(&newTask->mutex);
 	fork_join_task_t task = newTask->task;
-	&info->bigpool->thread_info[i].worker_state = 1;
-	newTask->runState = 1;						// Set the runstate to be 1 when task is in progress
+	info->worker_state = 1;	// Set the state of the worker to be busy
+	newTask->runState = 1;								// Set the runstate to be 1 when task is in progress
 	newTask->result = task(info->bigpool, newTask->data);
-	newTask->runState = 2;						// Set the runstate to be 2 when the result is aviliable
-	&info->bigpool->thread_info[i].worker_state = 0;
+	newTask->runState = 2;								// Set the runstate to be 2 when the result is aviliable
+	info->worker_state = 0;	// Set the state of the worker to be aviliable
 	sem_post(&newTask->signal);
 	pthread_mutex_unlock(&newTask->mutex);
 	return NULL;
@@ -248,12 +249,21 @@ struct future * thread_pool_submit(
  */
 void * future_get(struct future * givenFuture)
 {
-	// NOTE: Needed to be changed
-	sem_wait(&givenFuture->signal);
+	// If already had the result, return it
+	if (givenFuture->result != NULL) return givenFuture->result;
+	
+	// If there is not other aviliable worker
+	if (check_workers(givenFuture)) {
+		// This thread should execute the future by itself
+	}
+	else sem_wait(&givenFuture->signal);
 	return givenFuture->result;
 }
 
-/* Check if there is any sleeping worker */
+/* Check if there is any sleeping worker 
+ * Return true if at leaset one of the workers is aviliable
+ * Return false otherwise
+ */
 static bool check_workers(struct future * givenFuture)
 {
 	struct thread_pool * pool = current_thread_info->bigpool;
