@@ -260,10 +260,13 @@ struct future * thread_pool_submit(
  */
 void * future_get(struct future * givenFuture)
 {
-	// If already had the result, return it
+	// If current thread is a worker thread
 	if (current_thread_info != NULL) {
-		if (givenFuture->result != NULL) return givenFuture->result;
-	
+		// If already had the result, return it
+		if (givenFuture->result != NULL) {
+			printf("Result is there");
+			return givenFuture->result;
+		}
 		// If there is not other aviliable worker
 		if (check_workers(givenFuture)) {
 			pthread_mutex_lock(&givenFuture->mutex);
@@ -275,9 +278,14 @@ void * future_get(struct future * givenFuture)
 			current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
 			sem_post(&givenFuture->signal);
 			pthread_mutex_unlock(&givenFuture->mutex);
+			printf("Case when these is no worker aviliable");
+		}
+		else {
+			//sem_wait(&givenFuture->signal);i
+			printf("Workers are sleeping");
 		}
 	}
-	sem_wait(&givenFuture->signal);
+	else sem_wait(&givenFuture->signal);
 	return givenFuture->result;
 }
 
