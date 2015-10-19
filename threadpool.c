@@ -153,7 +153,7 @@ static void *worker(void *vargp)
  * Tasks that have been submitted but not executed may or
  * may not be executed.
  *
- * Deallocate the thread pool object before returning. 
+ * Deallocate the thread pool object before returning.
  */
 void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 {
@@ -236,42 +236,10 @@ struct future * thread_pool_submit(
 	}
 	/* Otherwise submit the task to a random sleeping worker, if all workers are busy then submit 
 	 * to a random workers queue */
-	else {
-		//int count;
-		//if (pool->N == 1) 									// The case when there is only one thread
+	else {									// The case when there is only one thread
 		pthread_mutex_lock(&current_thread_info->local_lock);
 		list_push_back(&current_thread_info->workerqueue, &newFuture->elem);
-		pthread_mutex_unlock(&current_thread_info->local_lock);	
-		/*else if (current_thread_info->worker_id == pool->N) // Current worker is the last worker in the pool
-		{
-			count = 1;
-			while (count != current_thread_info->worker_id) {
-				if (pool->thread_info[count].worker_state == 0)
-				{
-					// Submit the task to this sleeping worker
-					list_push_back(&pool->thread_info[count].workerqueue, &newFuture->elem);
-					break;
-				}
-				count++;				
-			}
-			list_push_back(&pool->thread_info[count - 1].workerqueue, &newFuture->elem);			
-		}
-		else 											
-		// Current worker is not the last worker than search starting from the next worker.
-		{
-			count = current_thread_info->worker_id + 1;
-			while (count != current_thread_info->worker_id) {
-				if (count == pool->N) count = 0;
-				if (pool->thread_info[count].worker_state == 0)
-				{
-					// Submit the task to this sleeping worker
-					list_push_back(&pool->thread_info[count].workerqueue, &newFuture->elem);
-					break;
-				}
-				count++;				
-			}
-			list_push_back(&pool->thread_info[count + 1].workerqueue, &newFuture->elem);
-		}*/		
+		pthread_mutex_unlock(&current_thread_info->local_lock);
 	}
 	/* Signal the workers there is a future submitted */
 	sem_post(&pool->semaphore);
