@@ -72,6 +72,7 @@ struct thread_pool * thread_pool_new(int nthreads)
 	pool->thread_info = malloc(nthreads * sizeof(struct thread_local_info) );
 	pool->N = nthreads;
 	pool->lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+	pool->is_shutdown = 0;
 	sem_init(&pool->semaphore, 0, 0);
 	list_init(&pool->subdeque);
 	
@@ -140,7 +141,7 @@ static void *thread_helper(struct thread_local_info * info)
 	}
 	newTask->result = task(info->bigpool, newTask->data);
 	newTask->runState = 2;								// Set the runstate to be 2 when the result is aviliable
-	info->worker_state = 0;	// Set the state of the worker to be aviliable
+	info->worker_state = 0;								// Set the state of the worker to be aviliable
 	sem_post(&newTask->signal);
 	pthread_mutex_unlock(&newTask->mutex);
 	return NULL;
@@ -153,7 +154,8 @@ static void *worker(void *vargp)
 	current_thread_info = (struct thread_local_info *)vargp;
 	while (1) {
 		sem_wait(&current_thread_info->bigpool->semaphore);
-		thread_helper(current_thread_info);
+		if (current_thread_info->bigpool->is_shutdown == 0)
+			thread_helper(current_thread_info);
 	}
 	return NULL;
 }
@@ -177,6 +179,7 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	int totalThreads = pool->N;
 	// Go through all the threads
 	int i = 0;
+	pool->is_shutdown = 1;
 	// EDIT JOINING (10/19/15)
 	for (; i < totalThreads; i++)
 	{
