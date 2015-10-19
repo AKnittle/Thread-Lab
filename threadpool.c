@@ -253,21 +253,23 @@ struct future * thread_pool_submit(
 void * future_get(struct future * givenFuture)
 {
 	// If already had the result, return it
-	if (givenFuture->result != NULL) return givenFuture->result;
+	if (current_thread_info != NULL) {
+		if (givenFuture->result != NULL) return givenFuture->result;
 	
-	// If there is not other aviliable worker
-	if (check_workers(givenFuture)) {
-		pthread_mutex_lock(&givenFuture->mutex);
-		fork_join_task_t task = givenFuture->task;
-		current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
-		givenFuture->runState = 1;								// Set the runstate to be 1 when task is in progress
-		givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
-		givenFuture->runState = 2;								// Set the runstate to be 2 when the result is aviliable
-		current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
-		sem_post(&givenFuture->signal);
-		pthread_mutex_unlock(&givenFuture->mutex);
+		// If there is not other aviliable worker
+		if (check_workers(givenFuture)) {
+			pthread_mutex_lock(&givenFuture->mutex);
+			fork_join_task_t task = givenFuture->task;
+			current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
+			givenFuture->runState = 1;								// Set the runstate to be 1 when task is in progress
+			givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
+			givenFuture->runState = 2;								// Set the runstate to be 2 when the result is aviliable
+			current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
+			sem_post(&givenFuture->signal);
+			pthread_mutex_unlock(&givenFuture->mutex);
+		}
 	}
-	else sem_wait(&givenFuture->signal);
+	sem_wait(&givenFuture->signal);
 	return givenFuture->result;
 }
 
