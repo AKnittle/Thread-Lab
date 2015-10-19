@@ -97,7 +97,6 @@ struct thread_pool * thread_pool_new(int nthreads)
  */
 static void *thread_helper(struct thread_local_info * info)
 {
-	int canary = 0;
 	struct future *newTask = malloc(sizeof *newTask);
 	// Pop from its own queue if there are tasks there
 	if (!list_empty(&info->workerqueue))
@@ -134,10 +133,6 @@ static void *thread_helper(struct thread_local_info * info)
 	fork_join_task_t task = newTask->task;
 	info->worker_state = 1;	// Set the state of the worker to be busy
 	newTask->runState = 1;								// Set the runstate to be 1 when task is in progress
-	if(canary != 0)
-	{
-		printf("!!!");
-	}
 	newTask->result = task(info->bigpool, newTask->data);
 	newTask->runState = 2;								// Set the runstate to be 2 when the result is aviliable
 	info->worker_state = 0;	// Set the state of the worker to be aviliable
