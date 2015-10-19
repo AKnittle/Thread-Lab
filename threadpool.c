@@ -254,7 +254,15 @@ void * future_get(struct future * givenFuture)
 	
 	// If there is not other aviliable worker
 	if (check_workers(givenFuture)) {
-		// This thread should execute the future by itself
+		pthread_mutex_lock(&givenFuture->mutex);
+		fork_join_task_t task = givenFuture->task;
+		current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
+		givenFuture->runState = 1;								// Set the runstate to be 1 when task is in progress
+		givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
+		givenFuture->runState = 2;								// Set the runstate to be 2 when the result is aviliable
+		current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
+		sem_post(&givenFuture->signal);
+		pthread_mutex_unlock(&givenFuture->mutex);
 	}
 	else sem_wait(&givenFuture->signal);
 	return givenFuture->result;
@@ -266,11 +274,14 @@ void * future_get(struct future * givenFuture)
  */
 static bool check_workers(struct future * givenFuture)
 {
-	struct thread_pool * pool = current_thread_info->bigpool;
-	int i = 0;
-	for (; i < pool->N; i++) 
-		if (pool->thread_info[i].worker_state == 0) return true;
-	return false;
+	if (current_thread_info != NULL) {
+		struct thread_pool * pool = current_thread_info->bigpool;
+		int i = 0;
+		for (; i < pool->N; i++) 
+			if (pool->thread_info[i].worker_state == 0) return true;
+		return false;
+	}
+	return true;
 }
 
 /* Deallocate this future.  Must be called after future_get() */
