@@ -298,8 +298,6 @@ void future_free(struct future * givenFuture)
 	 * 	a task has been completed
 	 */
 	struct future *oldFuture = givenFuture;
-	// free the elem
-	free(&oldFuture->elem);
 	// free the future
 	free(oldFuture);
 }
