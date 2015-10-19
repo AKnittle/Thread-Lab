@@ -94,7 +94,7 @@ struct thread_pool * thread_pool_new(int nthreads)
  */
 static void *thread_helper(struct thread_local_info * info)
 {
-	struct future *newTask;
+	struct future *newTask = malloc(sizeof *newTask);
 	// Pop from its own queue if there are tasks there
 	if (!list_empty(&info->workerqueue))
 	{
@@ -102,7 +102,6 @@ static void *thread_helper(struct thread_local_info * info)
 		newTask = list_entry(list_pop_back(&info->workerqueue), struct future, elem);
 		pthread_mutex_unlock(&info->local_lock);
 	}
-	
 	else if (!list_empty(&info->bigpool->subdeque)) {
 		//Get the task from the global queue if the global queue is not empty			
 			
@@ -224,7 +223,8 @@ struct future * thread_pool_submit(
 	sem_init(&newFuture->signal, 0, 0);
 	newFuture->mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 	newFuture->runState = 0;			// State 0 represents that the task has not been excuted yet
-	&newFuture->elem = (*list_elem)malloc(sizeof(list_elem));
+	//Andrew Knittle (10/19/15) 12:30
+	//newFuture->elem = NULL;
 	
 	/* If current thread is the main thread, submit the task to global deque */
 	if (current_thread_info == NULL) {
