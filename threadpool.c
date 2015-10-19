@@ -174,7 +174,7 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	// EDIT JOINING (10/19/15)
 	for (; i < totalThreads; i++)
 	{
-		sem_post(pool->semaphore);	
+		sem_post(&pool->semaphore);	
 	}
 	for (; i < totalThreads; i++)
 	{		
