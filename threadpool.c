@@ -281,7 +281,7 @@ static bool check_workers(struct future * givenFuture)
 			if (pool->thread_info[i].worker_state == 0) return true;
 		return false;
 	}
-	return true;
+	return false;
 }
 
 /* Deallocate this future.  Must be called after future_get() */
