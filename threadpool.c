@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <stdbool.h>
 #include "list.h"
 #include "threadpool.h"
 
@@ -77,6 +78,7 @@ struct thread_pool * thread_pool_new(int nthreads)
 	for (; i < nthreads; i++) {
 		pool->thread_info[i].worker_id = i + 1;
 		pool->thread_info[i].bigpool = pool;
+		pool->thread_info[i].worker_state = 0;
 		pool->thread_info[i].local_lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 		list_init(&pool->thread_info[i].workerqueue);		
 		pthread_create(&pool->thread_info[i].thread, NULL, worker, &pool->thread_info[i]);		
@@ -127,9 +129,11 @@ static void *thread_helper(struct thread_local_info * info)
 	// Strat executing the task function and put the result into the future
 	pthread_mutex_lock(&newTask->mutex);
 	fork_join_task_t task = newTask->task;
+	&info->bigpool->thread_info[i].worker_state = 1;
 	newTask->runState = 1;						// Set the runstate to be 1 when task is in progress
 	newTask->result = task(info->bigpool, newTask->data);
 	newTask->runState = 2;						// Set the runstate to be 2 when the result is aviliable
+	&info->bigpool->thread_info[i].worker_state = 0;
 	sem_post(&newTask->signal);
 	pthread_mutex_unlock(&newTask->mutex);
 	return NULL;
@@ -247,6 +251,16 @@ void * future_get(struct future * givenFuture)
 	// NOTE: Needed to be changed
 	sem_wait(&givenFuture->signal);
 	return givenFuture->result;
+}
+
+/* Check if there is any sleeping worker */
+static bool check_workers(struct future * givenFuture)
+{
+	struct thread_pool * pool = current_thread_info->bigpool;
+	int i = 0;
+	for (; i < pool->N; i++) 
+		if (pool->thread_info[i].worker_state == 0) return true;
+	return false;
 }
 
 /* Deallocate this future.  Must be called after future_get() */
