@@ -3,6 +3,7 @@
  *
  * A work-stealing, fork-join thread pool.
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -174,10 +175,12 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	// EDIT JOINING (10/19/15)
 	for (; i < totalThreads; i++)
 	{
-		sem_post(&pool->semaphore);	
+		sem_post(&pool->semaphore);
+		//printf("unlocking");	
 	}
 	for (; i < totalThreads; i++)
-	{		
+	{
+		//printf("Joining");		
 		//Free all futures still in the worker's local
 		//job queue.
 		//Must now join all threads.
