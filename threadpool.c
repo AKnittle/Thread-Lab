@@ -3,7 +3,6 @@
  *
  * A work-stealing, fork-join thread pool.
  */
-
 #include <stdlib.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -82,7 +81,7 @@ struct thread_pool * thread_pool_new(int nthreads)
 		list_init(&pool->thread_info[i].workerqueue);		
 		pthread_create(&pool->thread_info[i].thread, NULL, worker, &pool->thread_info[i]);		
 	}
-	
+
 	return pool;
 }
 
@@ -167,25 +166,17 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	int totalThreads = pool->N;
 	// Go through all the threads
 	int i = 0;
+	// EDIT JOINING (10/19/15)
+	for (; i < totalThreads; i++)
+	{
+		sem_post(pool->semaphore);	
+	}
 	for (; i < totalThreads; i++)
 	{		
 		//Free all futures still in the worker's local
 		//job queue.
-		/*while(!list_empty(&pool->thread_info[i].wokerqueue))
-		{
-			//pop off elements at the back and repeat
-			//until empty
-			struct future *oldTask =list_entry(list_pop_back(&pool->thread_info[i].wokerqueue), struct future, elem);
-			// call future free to destroy the future
-			free(oldTask);
-		}
-		*/
-
 		//Must now join all threads.
 		pthread_join(pool->thread_info[i].thread, NULL);
-		// all futures freed
-		// free the worker
-		//free(pool->threadinfo[i]);
 	}
 	// All workers freed
 	// free the worker list
