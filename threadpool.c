@@ -300,7 +300,7 @@ void * future_get(struct future * givenFuture)
  * Return true if at leaset one of the workers is aviliable
  * Return false otherwise
  */
-static bool check_workers(struct future * givenFuture)
+/*static bool check_workers(struct future * givenFuture)
 {
 	if (current_thread_info != NULL) {
 		struct thread_pool * pool = current_thread_info->bigpool;
@@ -316,7 +316,7 @@ static bool check_workers(struct future * givenFuture)
 		return false;
 	}
 	return false;
-}
+}*/
 
 /* Deallocate this future.  Must be called after future_get() */
 void future_free(struct future * givenFuture)
