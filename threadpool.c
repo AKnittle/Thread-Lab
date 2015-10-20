@@ -98,7 +98,7 @@ struct thread_pool * thread_pool_new(int nthreads)
  */
 static void *thread_helper(struct thread_local_info * info)
 {
-	struct future *newTask = malloc(sizeof *newTask);
+	struct future *newTask;
 	// Pop from its own queue if there are tasks there
 	if (!list_empty(&info->workerqueue))
 	{
@@ -130,6 +130,7 @@ static void *thread_helper(struct thread_local_info * info)
 		}
 	}
 	// Strat executing the task function and put the result into the future
+	if (newTask == NULL) return NULL;
 	pthread_mutex_lock(&newTask->mutex);
 	if (newTask->task == NULL) {
 		pthread_mutex_unlock(&newTask->mutex);
@@ -249,7 +250,7 @@ struct future * thread_pool_submit(
 	else {									// The case when there is only one thread
 		pthread_mutex_lock(&current_thread_info->local_lock);
 		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
-		current_thread_info->worker_state = 1;
+		//current_thread_info->worker_state = 1;
 		pthread_mutex_unlock(&current_thread_info->local_lock);
 	}
 	/* Signal the workers there is a future submitted */
@@ -271,7 +272,7 @@ void * future_get(struct future * givenFuture)
 			return givenFuture->result;
 		}
 		// If there is not other aviliable worker
-		if (!check_workers(givenFuture)) {
+		if (!check_workers(givenFuture) || current_thread_info->bigpool->N == 1) {
 			
 			pthread_mutex_lock(&current_thread_info->local_lock);
 			list_pop_back(&current_thread_info->workerqueue);
@@ -304,8 +305,14 @@ static bool check_workers(struct future * givenFuture)
 	if (current_thread_info != NULL) {
 		struct thread_pool * pool = current_thread_info->bigpool;
 		int i = 0;
-		for (; i < pool->N; i++) 
-			if (pool->thread_info[i].worker_state == 0) return true;
+		for (; i < pool->N; i++) {
+			pthread_mutex_lock(&pool->thread_info[i].local_lock);
+			if (pool->thread_info[i].worker_state == 0) {
+				pthread_mutex_unlock(&pool->thread_info[i].local_lock);
+				return true;
+			}
+			pthread_mutex_unlock(&pool->thread_info[i].local_lock);
+		}
 		return false;
 	}
 	return false;
