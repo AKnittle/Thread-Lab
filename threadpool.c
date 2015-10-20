@@ -120,10 +120,10 @@ static void *thread_helper(struct thread_local_info * info)
 		for (; i <= info->bigpool->N; i++) {
 			// If it is not itself
 			if (i != info->worker_id) {
-				if (!list_empty(&info->bigpool->thread_info[i].workerqueue)) {
-					pthread_mutex_lock(&info->bigpool->thread_info[i].local_lock);
-					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i].workerqueue), struct future, elem);
-					pthread_mutex_unlock(&info->bigpool->thread_info[i].local_lock);
+				if (!list_empty(&info->bigpool->thread_info[i - 1].workerqueue)) {
+					pthread_mutex_lock(&info->bigpool->thread_info[i - 1].local_lock);
+					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i - 1].workerqueue), struct future, elem);
+					pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
 					break;
 				}
 			}
@@ -245,8 +245,7 @@ struct future * thread_pool_submit(
 		list_push_back(&pool->subdeque, &myFuture->elem);
 		pthread_mutex_unlock(&pool->lock);
 	}
-	/* Otherwise submit the task to a random sleeping worker, if all workers are busy then submit 
-	 * to a random workers queue */
+	/* Otherwise submit the task to its own deque */
 	else {									// The case when there is only one thread
 		pthread_mutex_lock(&current_thread_info->local_lock);
 		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
@@ -289,7 +288,7 @@ void * future_get(struct future * givenFuture)
 			pthread_mutex_unlock(&givenFuture->mutex);
 		}
 		else {
-			//sem_wait(&givenFuture->signal);
+			sem_wait(&givenFuture->signal);
 		}
 	}
 	else sem_wait(&givenFuture->signal);
