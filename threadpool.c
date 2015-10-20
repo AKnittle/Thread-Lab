@@ -154,7 +154,9 @@ static void *worker(void *vargp)
 	current_thread_info = (struct thread_local_info *)vargp;
 	while (1) {
 		sem_wait(&current_thread_info->bigpool->semaphore);
+		pthread_mutex_lock(&current_thread_info->bigpool->lock);
 		shutdown = current_thread_info->bigpool->is_shutdown;
+		pthread_mutex_unlock(&current_thread_info->bigpool->lock);
 		if (shutdown == 0) {
 			thread_helper(current_thread_info);
 		}
@@ -182,7 +184,9 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	int totalThreads = pool->N;
 	// Go through all the threads
 	int j = 0;
+	pthread_mutex_lock(&pool->lock);
 	pool->is_shutdown = 1;
+	pthread_mutex_unlock(&pool->lock);
 	// EDIT JOINING (10/19/15)
 	for (; j < totalThreads; j++)
 	{
