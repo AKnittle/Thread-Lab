@@ -98,7 +98,6 @@ struct thread_pool * thread_pool_new(int nthreads)
  */
 static void *thread_helper(struct thread_local_info * info)
 {
-	int canary = 0;
 	struct future *newTask = malloc(sizeof *newTask);
 	// Pop from its own queue if there are tasks there
 	if (!list_empty(&info->workerqueue))
@@ -132,13 +131,13 @@ static void *thread_helper(struct thread_local_info * info)
 	}
 	// Strat executing the task function and put the result into the future
 	pthread_mutex_lock(&newTask->mutex);
+	if (newTask->task == NULL) {
+		pthread_mutex_unlock(&newTask->mutex);
+		return NULL;
+	}
 	fork_join_task_t task = newTask->task;
 	info->worker_state = 1;	// Set the state of the worker to be busy
-	newTask->runState = 1;								// Set the runstate to be 1 when task is in progress
-	if(canary != 0)
-	{
-		printf("!!!");
-	}
+	newTask->runState = 1;
 	newTask->result = task(info->bigpool, newTask->data);
 	newTask->runState = 2;								// Set the runstate to be 2 when the result is aviliable
 	info->worker_state = 0;								// Set the state of the worker to be aviliable
@@ -151,11 +150,15 @@ static void *thread_helper(struct thread_local_info * info)
  * The thread function for each worker */ 
 static void *worker(void *vargp)
 {
+	int shutdown;
 	current_thread_info = (struct thread_local_info *)vargp;
 	while (1) {
 		sem_wait(&current_thread_info->bigpool->semaphore);
-		if (current_thread_info->bigpool->is_shutdown == 0)
+		shutdown = current_thread_info->bigpool->is_shutdown;
+		if (shutdown == 0) {
 			thread_helper(current_thread_info);
+		}
+		else break;
 	}
 	return NULL;
 }
@@ -178,19 +181,17 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	 */
 	int totalThreads = pool->N;
 	// Go through all the threads
-	int i = 0;
+	int j = 0;
 	pool->is_shutdown = 1;
 	// EDIT JOINING (10/19/15)
-	for (; i < totalThreads; i++)
+	for (; j < totalThreads; j++)
 	{
 		sem_post(&pool->semaphore);
 		//printf("unlocking");	
 	}
+	int i = 0;
 	for (; i < totalThreads; i++)
 	{
-		//printf("Joining");		
-		//Free all futures still in the worker's local
-		//job queue.
 		//Must now join all threads.
 		pthread_join(pool->thread_info[i].thread, NULL);
 	}
@@ -245,7 +246,7 @@ struct future * thread_pool_submit(
 	else {									// The case when there is only one thread
 		pthread_mutex_lock(&current_thread_info->local_lock);
 		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
-		printf("%d\n", (int)list_size(&current_thread_info->workerqueue));
+		current_thread_info->worker_state = 1;
 		pthread_mutex_unlock(&current_thread_info->local_lock);
 	}
 	/* Signal the workers there is a future submitted */
@@ -264,11 +265,15 @@ void * future_get(struct future * givenFuture)
 	if (current_thread_info != NULL) {
 		// If already had the result, return it
 		if (givenFuture->result != NULL) {
-			printf("Result is there");
 			return givenFuture->result;
 		}
 		// If there is not other aviliable worker
-		if (check_workers(givenFuture)) {
+		if (!check_workers(givenFuture)) {
+			
+			pthread_mutex_lock(&current_thread_info->local_lock);
+			list_pop_back(&current_thread_info->workerqueue);
+			pthread_mutex_unlock(&current_thread_info->local_lock);
+			
 			pthread_mutex_lock(&givenFuture->mutex);
 			fork_join_task_t task = givenFuture->task;
 			current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
@@ -278,11 +283,9 @@ void * future_get(struct future * givenFuture)
 			current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
 			sem_post(&givenFuture->signal);
 			pthread_mutex_unlock(&givenFuture->mutex);
-			printf("Case when these is no worker aviliable");
 		}
 		else {
-			//sem_wait(&givenFuture->signal);i
-			printf("Workers are sleeping");
+			//sem_wait(&givenFuture->signal);
 		}
 	}
 	else sem_wait(&givenFuture->signal);
