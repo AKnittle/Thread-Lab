@@ -220,37 +220,37 @@ struct future * thread_pool_submit(
         fork_join_task_t task, 
         void * data)
 {	
-	/* Allocating a new Future struct for the task */
-	struct future *newFuture = malloc(sizeof *newFuture);
 	
+	/* Allocating a new future for the task */
+	struct future *myFuture = malloc(sizeof(struct future));
 	/* Initialzing the menbers of the Future */
-	newFuture->task = task;
-	newFuture->data = data;
-	newFuture->result = NULL;
-	sem_init(&newFuture->signal, 0, 0);
-	newFuture->mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
-	newFuture->runState = 0;			// State 0 represents that the task has not been excuted yet
-	//Andrew Knittle (10/19/15) 12:30
-	//newFuture->elem = NULL;
+	myFuture->task = task;	
+	myFuture->data = data;
+	myFuture->result = NULL;
+	sem_init(&myFuture->signal, 0, 0);
+	myFuture->mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+	myFuture->runState = 0;			// State 0 represents that the task has not been excuted yet
+
 	
 	/* If current thread is the main thread, submit the task to global deque */
 	if (current_thread_info == NULL) {
 	
 		/* Push the future into the global deque */
 		pthread_mutex_lock(&pool->lock);
-		list_push_back(&pool->subdeque, &newFuture->elem);
+		list_push_back(&pool->subdeque, &myFuture->elem);
 		pthread_mutex_unlock(&pool->lock);
 	}
 	/* Otherwise submit the task to a random sleeping worker, if all workers are busy then submit 
 	 * to a random workers queue */
 	else {									// The case when there is only one thread
 		pthread_mutex_lock(&current_thread_info->local_lock);
-		list_push_back(&current_thread_info->workerqueue, &newFuture->elem);
+		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
+		printf("%d\n", (int)list_size(&current_thread_info->workerqueue));
 		pthread_mutex_unlock(&current_thread_info->local_lock);
 	}
 	/* Signal the workers there is a future submitted */
 	sem_post(&pool->semaphore);
-	return newFuture;
+	return myFuture;
 }
 
 /* Make sure that the thread pool has completed the execution
