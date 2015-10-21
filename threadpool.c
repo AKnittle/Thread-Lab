@@ -102,7 +102,7 @@ struct thread_pool * thread_pool_new(int nthreads)
  */
 static void *thread_helper(struct thread_local_info * info)
 {
-	struct future *newTask;
+	struct future *newTask = NULL;
 	// Pop from its own queue if there are tasks there
 	if (!list_empty(&info->workerqueue))
 	{
@@ -276,35 +276,6 @@ struct future * thread_pool_submit(
  */
 void * future_get(struct future * givenFuture)
 {
-	// If current thread is a worker thread
-	/*if (current_thread_info != NULL) {
-		// If already had the result, return it
-		if (givenFuture->result != NULL) {
-			return givenFuture->result;
-		}
-		// If there is not other aviliable worker
-		if (current_thread_info->bigpool->N == 1) {
-			
-			pthread_mutex_lock(&current_thread_info->local_lock);
-			list_pop_back(&current_thread_info->workerqueue);
-			pthread_mutex_unlock(&current_thread_info->local_lock);
-			
-			pthread_mutex_lock(&givenFuture->mutex);
-			fork_join_task_t task = givenFuture->task;
-			current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
-			givenFuture->runState = 1;								// Set the runstate to be 1 when task is in progress
-			givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
-			givenFuture->runState = 2;								// Set the runstate to be 2 when the result is aviliable
-			current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
-			sem_post(&givenFuture->signal);
-			pthread_mutex_unlock(&givenFuture->mutex);
-		}
-		else {
-			sem_wait(&givenFuture->signal);
-		}
-	}
-	else sem_wait(&givenFuture->signal);
-	return givenFuture->result;*/
 	
 	// If the givenFuture is pending
 	if (current_thread_info != NULL) {
@@ -312,7 +283,9 @@ void * future_get(struct future * givenFuture)
 	int s = givenFuture->runState;
 	pthread_mutex_unlock(&givenFuture->mutex);
 	if (s == 0) {
+		pthread_mutex_lock(&givenFuture->mutex);
 		int myList = givenFuture->mylist;
+		pthread_mutex_unlock(&givenFuture->mutex);
 		if (myList < 0) return NULL;
 		else if (myList == 0) return NULL;
 		else {
@@ -338,7 +311,9 @@ void * future_get(struct future * givenFuture)
 	// If the givenFuture already had the result
 	else return givenFuture->result;
 	}
-	else sem_wait(&givenFuture->signal);
+	else { //If it is main thread, wait until the result is aviliable
+		sem_wait(&givenFuture->signal);
+	}
 	return givenFuture->result;
 }
 
@@ -368,7 +343,6 @@ void * future_get(struct future * givenFuture)
 void future_free(struct future * givenFuture)
 {
 	struct future *oldFuture = givenFuture;
-	// free the future
 	free(oldFuture);
 }
 
