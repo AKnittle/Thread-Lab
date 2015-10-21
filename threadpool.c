@@ -117,10 +117,11 @@ static void *thread_helper(struct thread_local_info * info)
 	if (in_myqueue == 0 && !list_empty(&info->bigpool->subdeque)) {
 		//Get the task from the global queue if the global queue is not empty
 		in_global = 1;
+		printf("lock is at addr %p\n", &info->bigpool->lock);
 		newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);		
 	}
 	pthread_mutex_unlock(&info->bigpool->lock);
-	if (in_myqueue == 0 && in_global == 0 && !list_empty(&info->bigpool->subdeque)) { // Get task from one of other worker
+	if (in_myqueue == 0 && in_global == 0) { // Get task from one of other worker
 		int i = 1;
 		for (; i <= info->bigpool->N; i++) {
 			// If it is not itself
@@ -257,6 +258,7 @@ struct future * thread_pool_submit(
 		myFuture->mylist = 0;
 		/* Push the future into the global deque */
 		pthread_mutex_lock(&pool->lock);
+		printf("lock addr: %p\n", &pool->lock);
 		list_push_back(&pool->subdeque, &myFuture->elem);
 		pthread_mutex_unlock(&pool->lock);
 	}
