@@ -104,8 +104,8 @@ static void *thread_helper(struct thread_local_info * info)
 {
 	struct future *newTask = NULL;
 	// Pop from its own queue if there are tasks there
-	pthread_mutex_lock(&info->local_lock);
 	pthread_mutex_lock(&info->bigpool->lock);
+	pthread_mutex_lock(&info->local_lock);
 	if (!list_empty(&info->workerqueue))
 	{
 		newTask = list_entry(list_pop_back(&info->workerqueue), struct future, elem);
@@ -129,8 +129,8 @@ static void *thread_helper(struct thread_local_info * info)
 			}
 		}
 	}
-	pthread_mutex_unlock(&info->bigpool->lock);
 	pthread_mutex_unlock(&info->local_lock);
+	pthread_mutex_unlock(&info->bigpool->lock);
 	// Strat executing the task function and put the result into the future
 	if (newTask == NULL) return NULL;
 	pthread_mutex_lock(&newTask->mutex);
