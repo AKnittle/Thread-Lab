@@ -104,17 +104,15 @@ static void *thread_helper(struct thread_local_info * info)
 {
 	struct future *newTask = NULL;
 	// Pop from its own queue if there are tasks there
+	pthread_mutex_lock(&info->local_lock);
+	pthread_mutex_lock(&info->bigpool->lock);
 	if (!list_empty(&info->workerqueue))
 	{
-		pthread_mutex_lock(&info->local_lock);
 		newTask = list_entry(list_pop_back(&info->workerqueue), struct future, elem);
 		pthread_mutex_unlock(&info->local_lock);
 	}
 	else if (!list_empty(&info->bigpool->subdeque)) {
-		//Get the task from the global queue if the global queue is not empty			
-			
-		// Lock the mutex
-		pthread_mutex_lock(&info->bigpool->lock);
+		//Get the task from the global queue if the global queue is not empty
 		newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);
 		pthread_mutex_unlock(&info->bigpool->lock);
 		
@@ -124,12 +122,13 @@ static void *thread_helper(struct thread_local_info * info)
 		for (; i <= info->bigpool->N; i++) {
 			// If it is not itself
 			if (i != info->worker_id) {
+				pthread_mutex_lock(&info->bigpool->thread_info[i - 1].local_lock);
 				if (!list_empty(&info->bigpool->thread_info[i - 1].workerqueue)) {
-					pthread_mutex_lock(&info->bigpool->thread_info[i - 1].local_lock);
 					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i - 1].workerqueue), struct future, elem);
 					pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
 					break;
 				}
+				pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
 			}
 		}
 	}
