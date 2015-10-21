@@ -102,7 +102,8 @@ struct thread_pool * thread_pool_new(int nthreads)
  */
 static void *thread_helper(struct thread_local_info * info)
 {
-	struct future *newTask;
+	// Andrew: TEMP FIX (10/20/15 11:30 pm)
+	struct future *newTask = NULL;
 	// Pop from its own queue if there are tasks there
 	if (!list_empty(&info->workerqueue))
 	{
