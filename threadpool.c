@@ -109,14 +109,11 @@ static void *thread_helper(struct thread_local_info * info)
 	if (!list_empty(&info->workerqueue))
 	{
 		newTask = list_entry(list_pop_back(&info->workerqueue), struct future, elem);
-		pthread_mutex_unlock(&info->local_lock);
 	}
 	else if (!list_empty(&info->bigpool->subdeque)) {
 		//Get the task from the global queue if the global queue is not empty
-		newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);
-		pthread_mutex_unlock(&info->bigpool->lock);
-		
-		}
+		newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);		
+	}
 	else { // Get task from one of other worker
 		int i = 1;
 		for (; i <= info->bigpool->N; i++) {
@@ -132,6 +129,8 @@ static void *thread_helper(struct thread_local_info * info)
 			}
 		}
 	}
+	pthread_mutex_unlock(&info->bigpool->lock);
+	pthread_mutex_unlock(&info->local_lock);
 	// Strat executing the task function and put the result into the future
 	if (newTask == NULL) return NULL;
 	pthread_mutex_lock(&newTask->mutex);
