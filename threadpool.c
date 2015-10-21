@@ -37,6 +37,10 @@ struct future{
 									1 represents the task is currently running,
 									2 represents the task already has a result aviliable */
 	struct list_elem elem;   	/* Link element for the list */
+	int mylist;					/* Flag to show which list this future is in
+									-1 if it is not in a list
+									0 if it in global queue
+									positive numbers represent worker_id otherwise */
 	sem_t signal;
 };
 
@@ -54,7 +58,7 @@ struct thread_local_info{
 };
 
 static __thread struct thread_local_info *current_thread_info = NULL;
-static bool check_workers(struct future *);
+//static bool check_workers(struct future *);
 
 /* 
  * Forward declaration of worker threads
@@ -136,6 +140,7 @@ static void *thread_helper(struct thread_local_info * info)
 		pthread_mutex_unlock(&newTask->mutex);
 		return NULL;
 	}
+	newTask->mylist = -1;
 	fork_join_task_t task = newTask->task;
 	info->worker_state = 1;	// Set the state of the worker to be busy
 	newTask->runState = 1;
@@ -144,7 +149,7 @@ static void *thread_helper(struct thread_local_info * info)
 	info->worker_state = 0;								// Set the state of the worker to be aviliable
 	sem_post(&newTask->signal);
 	pthread_mutex_unlock(&newTask->mutex);
-	return NULL;
+	return newTask->result;
 }
 
 /*
@@ -154,10 +159,13 @@ static void *worker(void *vargp)
 	int shutdown;
 	current_thread_info = (struct thread_local_info *)vargp;
 	while (1) {
+		
 		sem_wait(&current_thread_info->bigpool->semaphore);
+		
 		pthread_mutex_lock(&current_thread_info->bigpool->lock);
 		shutdown = current_thread_info->bigpool->is_shutdown;
 		pthread_mutex_unlock(&current_thread_info->bigpool->lock);
+		
 		if (shutdown == 0) {
 			thread_helper(current_thread_info);
 		}
@@ -187,13 +195,13 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	int j = 0;
 	pthread_mutex_lock(&pool->lock);
 	pool->is_shutdown = 1;
-	pthread_mutex_unlock(&pool->lock);
 	// EDIT JOINING (10/19/15)
 	for (; j < totalThreads; j++)
 	{
 		sem_post(&pool->semaphore);
 		//printf("unlocking");	
 	}
+	pthread_mutex_unlock(&pool->lock);
 	int i = 0;
 	for (; i < totalThreads; i++)
 	{
@@ -240,21 +248,24 @@ struct future * thread_pool_submit(
 	
 	/* If current thread is the main thread, submit the task to global deque */
 	if (current_thread_info == NULL) {
-	
+		myFuture->mylist = 0;
 		/* Push the future into the global deque */
 		pthread_mutex_lock(&pool->lock);
 		list_push_back(&pool->subdeque, &myFuture->elem);
 		pthread_mutex_unlock(&pool->lock);
 	}
 	/* Otherwise submit the task to its own deque */
-	else {									// The case when there is only one thread
+	else {									
+		myFuture->mylist = current_thread_info->worker_id;
 		pthread_mutex_lock(&current_thread_info->local_lock);
 		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
 		//current_thread_info->worker_state = 1;
 		pthread_mutex_unlock(&current_thread_info->local_lock);
 	}
 	/* Signal the workers there is a future submitted */
+	pthread_mutex_lock(&pool->lock);
 	sem_post(&pool->semaphore);
+	pthread_mutex_unlock(&pool->lock);
 	return myFuture;
 }
 
@@ -266,13 +277,13 @@ struct future * thread_pool_submit(
 void * future_get(struct future * givenFuture)
 {
 	// If current thread is a worker thread
-	if (current_thread_info != NULL) {
+	/*if (current_thread_info != NULL) {
 		// If already had the result, return it
 		if (givenFuture->result != NULL) {
 			return givenFuture->result;
 		}
 		// If there is not other aviliable worker
-		if (!check_workers(givenFuture) || current_thread_info->bigpool->N == 1) {
+		if (current_thread_info->bigpool->N == 1) {
 			
 			pthread_mutex_lock(&current_thread_info->local_lock);
 			list_pop_back(&current_thread_info->workerqueue);
@@ -291,6 +302,41 @@ void * future_get(struct future * givenFuture)
 		else {
 			sem_wait(&givenFuture->signal);
 		}
+	}
+	else sem_wait(&givenFuture->signal);
+	return givenFuture->result;*/
+	
+	// If the givenFuture is pending
+	if (current_thread_info != NULL) {
+	pthread_mutex_lock(&givenFuture->mutex);
+	int s = givenFuture->runState;
+	pthread_mutex_unlock(&givenFuture->mutex);
+	if (s == 0) {
+		int myList = givenFuture->mylist;
+		if (myList < 0) return NULL;
+		else if (myList == 0) return NULL;
+		else {
+			pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+			list_remove(&givenFuture->elem);
+			pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+			
+			pthread_mutex_lock(&givenFuture->mutex);
+			fork_join_task_t task = givenFuture->task;
+			current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
+			givenFuture->runState = 1;								// Set the runstate to be 1 when task is in progress
+			givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
+			givenFuture->runState = 2;								// Set the runstate to be 2 when the result is aviliable
+			current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
+			sem_post(&givenFuture->signal);
+			pthread_mutex_unlock(&givenFuture->mutex);
+		}
+	}
+	// If the givenFuture is been executing 
+	else if (s == 1) {
+		sem_wait(&givenFuture->signal);
+	}
+	// If the givenFuture already had the result
+	else return givenFuture->result;
 	}
 	else sem_wait(&givenFuture->signal);
 	return givenFuture->result;
@@ -321,10 +367,6 @@ void * future_get(struct future * givenFuture)
 /* Deallocate this future.  Must be called after future_get() */
 void future_free(struct future * givenFuture)
 {
-	/*
-	 * NOTE: Should be called when 
-	 * 	a task has been completed
-	 */
 	struct future *oldFuture = givenFuture;
 	// free the future
 	free(oldFuture);
