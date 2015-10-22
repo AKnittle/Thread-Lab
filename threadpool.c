@@ -213,6 +213,7 @@ static void *worker(void *vargp)
  */
 void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 {
+	//printf("TERMINATING\n");
 	/*Order in how to stop things:
 	 *	1.) Stop the workers and free all futures
 	 *	2.) free all workers
@@ -284,9 +285,10 @@ struct future * thread_pool_submit(
 		pthread_mutex_unlock(&pool->lock);
 	}
 	/* Otherwise submit the task to its own deque */
-	else {									
+	else {	
+                pthread_mutex_lock(&current_thread_info->local_lock);
 		myFuture->mylist = current_thread_info->worker_id;
-		pthread_mutex_lock(&current_thread_info->local_lock);
+		//pthread_mutex_lock(&current_thread_info->local_lock);
 		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
 		pthread_mutex_unlock(&current_thread_info->local_lock);
 	}
