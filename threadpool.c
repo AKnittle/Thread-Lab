@@ -220,6 +220,7 @@ static void *worker(void *vargp)
  */
 void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 {
+	//printf("TERMINATING\n");
 	/*Order in how to stop things:
 	 *	1.) Stop the workers and free all futures
 	 *	2.) free all workers
@@ -292,7 +293,7 @@ struct future * thread_pool_submit(
 	}
 	/* Otherwise submit the task to its own deque */
 	else {			
-		pthread_mutex_lock(&current_thread_info->local_lock);						
+		pthread_mutex_lock(&current_thread_info->local_lock);
 		myFuture->mylist = current_thread_info->worker_id;
 		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
 		pthread_mutex_unlock(&current_thread_info->local_lock);
@@ -333,7 +334,7 @@ void * future_get(struct future * givenFuture)
 			pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 			//printf("Unlocking worker list in worker: %d with addr: %p\n", myList - 1, &current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 
-					//pthread_mutex_lock(&givenFuture->mutex);
+
 			givenFuture->mylist = -1;
 			fork_join_task_t task = givenFuture->task;
 			current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
