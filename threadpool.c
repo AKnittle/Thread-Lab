@@ -169,6 +169,7 @@ static void *worker(void *vargp)
 {
 	int shutdown;
 	current_thread_info = (struct thread_local_info *)vargp;
+	printf("I'm this thread: %d\n", current_thread_info->worker_id);
 	while (1) {
 		//Wait until a future is ready or it is about to shutdown
 		sem_wait(&current_thread_info->bigpool->semaphore);
