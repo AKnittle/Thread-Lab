@@ -299,6 +299,10 @@ void * future_get(struct future * givenFuture)
 		if (myList > 0) {
 				// Remove this future from its list when trying to executing it
 			pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+			if (!is_interior (&givenFuture->elem)) {
+				sem_wait(&givenFuture->signal);
+				return givenFuture->result;
+			}
 			list_remove(&givenFuture->elem);
 			givenFuture->elem.next = NULL;
 			givenFuture->elem.prev = NULL;
@@ -316,7 +320,7 @@ void * future_get(struct future * givenFuture)
 			current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
 			pthread_mutex_unlock(&givenFuture->mutex);
 			sem_post(&givenFuture->signal);
-			//sem_wait(&givenFuture->signal);
+			sem_wait(&givenFuture->signal);
 		}
 		else {
 			pthread_mutex_unlock(&givenFuture->mutex);
