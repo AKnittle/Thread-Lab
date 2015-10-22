@@ -120,13 +120,15 @@ static void *thread_helper(struct thread_local_info * info)
 		newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);		
 	}
 	pthread_mutex_unlock(&info->bigpool->lock);
-	if (in_myqueue == 0 && in_global == 0 ) { // Get task from one of other worker
+	if (in_myqueue == 0 && in_global == 0) { // Get task from one of other worker
 		int i = 1;
 		for (; i <= info->bigpool->N; i++) {
 			// If it is not itself
 			if (i != info->worker_id) {
 				pthread_mutex_lock(&info->bigpool->thread_info[i - 1].local_lock);
 				if (!list_empty(&info->bigpool->thread_info[i - 1].workerqueue)) {
+					// List assertion failed here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+					// WHY???????????????????????????
 					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i - 1].workerqueue), struct future, elem);
 					pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
 					break;
@@ -153,6 +155,8 @@ static void *thread_helper(struct thread_local_info * info)
 	pthread_mutex_lock(&newTask->mutex);
 	newTask->runState = 2;								// Set the runstate to be 2 when the result is aviliable
 	info->worker_state = 0;								// Set the state of the worker to be aviliable
+	
+	// Signal that this future has the value
 	sem_post(&newTask->signal);
 	pthread_mutex_unlock(&newTask->mutex);
 	return newTask->result;
@@ -280,32 +284,66 @@ struct future * thread_pool_submit(
  * Returns the value returned by this task.
  */
 void * future_get(struct future * givenFuture)
-{
+{/*
+	if (current_thread_info != NULL) {
+	
+	if (givenFuture->mylist == -1) {
+		sem_wait(&givenFuture->signal);
+	}
+	else {
+		int myList = givenFuture->mylist;
+		pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+		pthread_mutex_lock(&givenFuture->mutex);
+		//int s = givenFuture->runState;
+		list_remove(&givenFuture->elem);
+		givenFuture->elem.next = NULL;
+		givenFuture->elem.prev = NULL;		
+
+		givenFuture->mylist = -1;
+		fork_join_task_t task = givenFuture->task;
+		current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
+		givenFuture->runState = 1;								// Set the runstate to be 1 when task is in progress
+		pthread_mutex_unlock(&givenFuture->mutex);
+		givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
+		pthread_mutex_lock(&givenFuture->mutex);
+		givenFuture->runState = 2;								// Set the runstate to be 2 when the result is aviliable
+		current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
+		sem_post(&givenFuture->signal);
+		pthread_mutex_unlock(&givenFuture->mutex);
+		pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);		
+	}
+}
+else { 
+	sem_wait(&givenFuture->signal);
+}
+		return givenFuture->result;*/
+	
 	//If the current thread is not main thread, check the future state
 	if (current_thread_info != NULL) {
 		
 		pthread_mutex_lock(&givenFuture->mutex);
-		int s = givenFuture->runState;
+		//int s = givenFuture->runState;
 		//pthread_mutex_unlock(&givenFuture->mutex);
 		
 		// If the givenFuture is pending
-		if (s == 0) {
+		//if (s == 0) {
 			
 			//Get the list info for the future
 			//pthread_mutex_lock(&givenFuture->mutex);
-			int myList = givenFuture->mylist;
+		int myList = givenFuture->mylist;
 			//pthread_mutex_unlock(&givenFuture->mutex);
 		
-			if (myList > 0) {
+		if (myList > 0) {
 				// Remove this future from its list when trying to executing it
 				pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
-				if (givenFuture->elem.next != NULL || givenFuture->elem.prev != NULL) {
+				//if (givenFuture->elem.next != NULL || givenFuture->elem.prev != NULL) {
 					list_remove(&givenFuture->elem);
 					givenFuture->elem.next = NULL;
 					givenFuture->elem.prev = NULL;
 					pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 
 					//pthread_mutex_lock(&givenFuture->mutex);
+					givenFuture->mylist = -1;
 					fork_join_task_t task = givenFuture->task;
 					current_thread_info->worker_state = 1;					// Set the state of the worker to be busy
 					givenFuture->runState = 1;								// Set the runstate to be 1 when task is in progress
@@ -314,29 +352,35 @@ void * future_get(struct future * givenFuture)
 					pthread_mutex_lock(&givenFuture->mutex);
 					givenFuture->runState = 2;								// Set the runstate to be 2 when the result is aviliable
 					current_thread_info->worker_state = 0;					// Set the state of the worker to be aviliable
+					pthread_mutex_unlock(&givenFuture->mutex);
 					sem_post(&givenFuture->signal);
+					sem_wait(&givenFuture->signal);
+					return givenFuture->result;
 					//pthread_mutex_unlock(&givenFuture->mutex);
-				}
-				else pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+				//}
+				//else pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+				//pthread_mutex_unlock(&givenFuture->mutex);
 			}
 			else {
 				pthread_mutex_unlock(&givenFuture->mutex);
-				return NULL;
+				sem_wait(&givenFuture->signal);
+				return givenFuture->result;
 			}
 		}
 		// If the givenFuture is been executing 
-		else if (s == 1) {
+		/*else if (s == 1) {
 			pthread_mutex_unlock(&givenFuture->mutex);
 			sem_wait(&givenFuture->signal);
 			return givenFuture->result;
-		}
-		pthread_mutex_unlock(&givenFuture->mutex);
-	}
+		}*/
+		//pthread_mutex_unlock(&givenFuture->mutex);
+	//}
 	//If it is main thread, wait until the result is aviliable
 	else { 
 		sem_wait(&givenFuture->signal);
+		return givenFuture->result;
 	}
-	return givenFuture->result;
+	//return givenFuture->result;
 }
 
 
