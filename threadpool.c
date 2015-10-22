@@ -113,13 +113,18 @@ static void *thread_helper(struct thread_local_info * info)
 		newTask = list_entry(list_pop_back(&current_thread_info->workerqueue), struct future, elem);
 	}
 	pthread_mutex_unlock(&current_thread_info->local_lock);
-	pthread_mutex_lock(&info->bigpool->lock);
-	if (in_myqueue == 0 && !list_empty(&info->bigpool->subdeque)) {
-		//Get the task from the global queue if the global queue is not empty
-		in_global = 1;
-		newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);		
+	//pthread_mutex_lock(&info->bigpool->lock);
+	if (in_myqueue == 0)
+	{ 
+		pthread_mutex_lock(&info->bigpool->lock);
+		if( !list_empty(&info->bigpool->subdeque)) 
+		{
+			//Get the task from the global queue if the global queue is not empty
+			in_global = 1;
+			newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);		
+		}
+		pthread_mutex_unlock(&info->bigpool->lock);
 	}
-	pthread_mutex_unlock(&info->bigpool->lock);
 	if (in_myqueue == 0 && in_global == 0) { // Get task from one of other worker
 		int i = 1;
 		for (; i <= info->bigpool->N; i++) {
@@ -169,6 +174,7 @@ static void *worker(void *vargp)
 {
 	int shutdown;
 	current_thread_info = (struct thread_local_info *)vargp;
+	//printf("I'm this thread: %d\n", current_thread_info->worker_id);
 	while (1) {
 		//Wait until a future is ready or it is about to shutdown
 		sem_wait(&current_thread_info->bigpool->semaphore);
