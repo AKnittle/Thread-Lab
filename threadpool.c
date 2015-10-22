@@ -58,6 +58,8 @@ struct thread_local_info{
 };
 
 static __thread struct thread_local_info *current_thread_info = NULL;
+static inline bool
+is_interior (struct list_elem *elem);
 //static bool check_workers(struct future *);
 
 /* 
@@ -110,6 +112,8 @@ static void *thread_helper(struct thread_local_info * info)
 	if (!list_empty(&current_thread_info->workerqueue))
 	{
 		in_myqueue = 1;
+		struct list_elem *back = list_back (&current_thread_info->workerqueue);
+		if (is_interior(back))
 		newTask = list_entry(list_pop_back(&current_thread_info->workerqueue), struct future, elem);
 	}
 	pthread_mutex_unlock(&current_thread_info->local_lock);
@@ -121,6 +125,8 @@ static void *thread_helper(struct thread_local_info * info)
 		{
 			//Get the task from the global queue if the global queue is not empty
 			in_global = 1;
+			struct list_elem *front = list_front (&info->bigpool->subdeque);
+			if (is_interior(front))
 			newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);		
 		}
 		pthread_mutex_unlock(&info->bigpool->lock);
@@ -134,9 +140,12 @@ static void *thread_helper(struct thread_local_info * info)
 				if (!list_empty(&info->bigpool->thread_info[i - 1].workerqueue)) {
 					// List assertion failed here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 					// WHY???????????????????????????
+					struct list_elem *front = list_front (&info->bigpool->thread_info[i - 1].workerqueue);
+					if (is_interior(front)) {
 					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i - 1].workerqueue), struct future, elem);
 					pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
 					break;
+				}
 				}
 				pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
 			}
@@ -345,6 +354,14 @@ void future_free(struct future * givenFuture)
 {
 	struct future *oldFuture = givenFuture;
 	free(oldFuture);
+}
+
+/* Returns true if ELEM is an interior element,
+   false otherwise. */
+static inline bool
+is_interior (struct list_elem *elem)
+{
+  return elem != NULL && elem->prev != NULL && elem->next != NULL;
 }
 
 
