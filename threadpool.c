@@ -109,14 +109,17 @@ static void *thread_helper(struct thread_local_info * info)
 	struct future *newTask = NULL;
 	// Pop from its own queue if there are tasks there
 	pthread_mutex_lock(&current_thread_info->local_lock);
+	//printf("Locking local list in worker: %d with addr: %p\n", current_thread_info->worker_id, &current_thread_info->local_lock);
 	if (!list_empty(&current_thread_info->workerqueue))
 	{
 		in_myqueue = 1;
 		struct list_elem *back = list_back (&current_thread_info->workerqueue);
 		if (is_interior(back))
 		newTask = list_entry(list_pop_back(&current_thread_info->workerqueue), struct future, elem);
+		//printf("Pop task out from worker: %d\n", current_thread_info->worker_id);
 	}
 	pthread_mutex_unlock(&current_thread_info->local_lock);
+	//printf("Unlocking local list in worker: %d\n", current_thread_info->worker_id);
 	//pthread_mutex_lock(&info->bigpool->lock);
 	if (in_myqueue == 0)
 	{ 
@@ -136,6 +139,8 @@ static void *thread_helper(struct thread_local_info * info)
 		for (; i <= info->bigpool->N; i++) {
 			// If it is not itself
 			if (i != current_thread_info->worker_id) {
+				//printf("Locking worker list in worker: %d with addr: %p\n", i - 1, &info->bigpool->thread_info[i - 1].local_lock);
+	
 				pthread_mutex_lock(&info->bigpool->thread_info[i - 1].local_lock);
 				if (!list_empty(&info->bigpool->thread_info[i - 1].workerqueue)) {
 					// List assertion failed here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -144,10 +149,12 @@ static void *thread_helper(struct thread_local_info * info)
 					if (is_interior(front)) {
 					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i - 1].workerqueue), struct future, elem);
 					pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
+					//printf("Pop task out from worker: %d\n", i - 1);
 					break;
 				}
 				}
 				pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
+				//printf("Unlocking worker list in worker: %d with addr: %p\n", i - 1, &info->bigpool->thread_info[i - 1].local_lock);
 			}
 		}
 	}
@@ -277,16 +284,16 @@ struct future * thread_pool_submit(
 	
 	/* If current thread is the main thread, submit the task to global deque */
 	if (current_thread_info == NULL) {
+		pthread_mutex_lock(&pool->lock);
 		myFuture->mylist = 0;
 		/* Push the future into the global deque */
-		pthread_mutex_lock(&pool->lock);
 		list_push_back(&pool->subdeque, &myFuture->elem);
 		pthread_mutex_unlock(&pool->lock);
 	}
 	/* Otherwise submit the task to its own deque */
-	else {									
+	else {			
+		pthread_mutex_lock(&current_thread_info->local_lock);						
 		myFuture->mylist = current_thread_info->worker_id;
-		pthread_mutex_lock(&current_thread_info->local_lock);
 		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
 		pthread_mutex_unlock(&current_thread_info->local_lock);
 	}
@@ -313,6 +320,8 @@ void * future_get(struct future * givenFuture)
 		// The given future is still pending
 		if (myList > 0) {
 				// Remove this future from its list when trying to executing it
+			//printf("Locking worker list in worker: %d with addr: %p\n", myList - 1, &current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+	
 			pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 			if (!is_interior (&givenFuture->elem)) {
 				sem_wait(&givenFuture->signal);
@@ -322,6 +331,7 @@ void * future_get(struct future * givenFuture)
 			givenFuture->elem.next = NULL;
 			givenFuture->elem.prev = NULL;
 			pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+			//printf("Unlocking worker list in worker: %d with addr: %p\n", myList - 1, &current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 
 					//pthread_mutex_lock(&givenFuture->mutex);
 			givenFuture->mylist = -1;
@@ -352,8 +362,11 @@ void * future_get(struct future * givenFuture)
 /* Deallocate this future.  Must be called after future_get() */
 void future_free(struct future * givenFuture)
 {
-	struct future *oldFuture = givenFuture;
-	free(oldFuture);
+	if (givenFuture != NULL) {
+		//sem_wait(&givenFuture->signal);
+		struct future *oldFuture = givenFuture;
+		free(oldFuture);
+	}
 }
 
 /* Returns true if ELEM is an interior element,
