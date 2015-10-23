@@ -317,6 +317,11 @@ void * future_get(struct future * givenFuture)
 	
 			pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 			if (givenFuture->mylist > 0) {
+			/*if (!is_interior (&givenFuture->elem)) {
+				sem_wait(&givenFuture->signal);
+				pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+				return givenFuture->result;
+			}*/
 			list_remove(&givenFuture->elem);
 			givenFuture->mylist = -1;
 			pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
