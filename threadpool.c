@@ -90,9 +90,8 @@ struct thread_pool * thread_pool_new(int nthreads)
 		pool->thread_info[i].worker_state = 0;
 		pool->thread_info[i].local_lock = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 		list_init(&pool->thread_info[i].workerqueue);		
-		pthread_create(&pool->thread_info[i].thread, NULL, worker, &pool->thread_info[i]);		
+		pthread_create(&pool->thread_info[i].thread, NULL, worker, &pool->thread_info[i]);	
 	}
-
 	return pool;
 }
 
@@ -134,7 +133,7 @@ static void *thread_helper(struct thread_local_info * info)
 			if (is_interior(front)) {
 				//printf("135: List size is %d\n", (int)list_size (&info->bigpool->subdeque));	
 				newTask = list_entry(list_pop_front(&info->bigpool->subdeque), struct future, elem);
-			}		
+			}
 		}
 		pthread_mutex_unlock(&info->bigpool->lock);
 	}
@@ -275,8 +274,7 @@ struct future * thread_pool_submit(
         struct thread_pool *pool, 
         fork_join_task_t task, 
         void * data)
-{	
-	
+{		
 	/* Allocating a new future for the task */
 	struct future *myFuture = malloc(sizeof(struct future));
 	/* Initialzing the menbers of the Future */
@@ -297,7 +295,7 @@ struct future * thread_pool_submit(
 		pthread_mutex_unlock(&pool->lock);
 	}
 	/* Otherwise submit the task to its own deque */
-	else {			
+	else {		
 		pthread_mutex_lock(&current_thread_info->local_lock);
 		myFuture->mylist = current_thread_info->worker_id;
 		list_push_back(&current_thread_info->workerqueue, &myFuture->elem);
@@ -329,10 +327,10 @@ void * future_get(struct future * givenFuture)
 			//printf("Locking worker list in worker: %d with addr: %p\n", myList - 1, &current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 	
 			pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
-			if (!is_interior (&givenFuture->elem)) {
+			/*if (!is_interior (&givenFuture->elem)) {
 				sem_wait(&givenFuture->signal);
 				return givenFuture->result;
-			}
+			}*/
 			//printf("336: List size is %d\n", (int)list_size (&current_thread_info->bigpool->thread_info[myList - 1].workerqueue));
 			list_remove(&givenFuture->elem);
 			givenFuture->elem.next = NULL;
