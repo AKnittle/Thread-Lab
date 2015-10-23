@@ -60,7 +60,6 @@ struct thread_local_info{
 static __thread struct thread_local_info *current_thread_info = NULL;
 static inline bool
 is_interior (struct list_elem *elem);
-//static bool check_workers(struct future *);
 
 /* 
  * Forward declaration of worker threads
@@ -103,6 +102,11 @@ struct thread_pool * thread_pool_new(int nthreads)
  */
 static void *thread_helper(struct thread_local_info * info)
 {
+	/*
+ 	 * Variables used to check where a worker is taking a job from
+ 	 * in_myqueue is for the worker's local queue
+ 	 * in_global is for the global queue
+ 	 */ 
 	int in_myqueue = 0;
 	int in_global = 0;
 	struct future *newTask = NULL;
@@ -110,12 +114,10 @@ static void *thread_helper(struct thread_local_info * info)
 	pthread_mutex_lock(&current_thread_info->local_lock);
 	if (!list_empty(&current_thread_info->workerqueue))
 	{
-		in_myqueue = 1;
-		//struct list_elem *back = list_back (&current_thread_info->workerqueue);
-		//if (is_interior(back)) {			
+			//Found a job in the worker's own queue
+			in_myqueue = 1;			
 			newTask = list_entry(list_pop_back(&current_thread_info->workerqueue), struct future, elem);
 			newTask->mylist = -1;
-		//}
 	}
 	pthread_mutex_unlock(&current_thread_info->local_lock);
 	if (in_myqueue == 0)
