@@ -53,9 +53,6 @@ struct thread_local_info{
 };
 
 static __thread struct thread_local_info *current_thread_info = NULL;
-static inline bool
-is_interior (struct list_elem *elem);
-
 /* 
  * Forward declaration of worker threads
  */
@@ -108,17 +105,16 @@ static void *thread_helper(struct thread_local_info * info)
 	pthread_mutex_lock(&current_thread_info->local_lock);
 	if (!list_empty(&current_thread_info->workerqueue))
 	{
-			//Found a job in the worker's own queue
-		in_myqueue = 1;			
-		newTask = list_entry(list_pop_back(&current_thread_info->workerqueue), struct future, elem);
-		newTask->mylist = -1;
-		in_myqueue = 1;		
+		//Found a job in the worker's own queue
+		in_myqueue = 1;
+		//Take job out of the list, and update values			
 		newTask = list_entry(list_pop_back(&current_thread_info->workerqueue), struct future, elem);
 		newTask->mylist = -1;
 	}
 	pthread_mutex_unlock(&current_thread_info->local_lock);
 	if (in_myqueue == 0)
-	{ 
+	{
+		//Checking the global queue...  
 		pthread_mutex_lock(&info->bigpool->lock);
 		if( !list_empty(&info->bigpool->subdeque)) 
 		{
@@ -129,14 +125,16 @@ static void *thread_helper(struct thread_local_info * info)
 		}
 		pthread_mutex_unlock(&info->bigpool->lock);
 	}
-	if (in_myqueue == 0 && in_global == 0) { // Get task from one of other worker
+	if (in_myqueue == 0 && in_global == 0) { 
+		// Get task from one of other worker
 		int i = 1;
 		for (; i <= info->bigpool->N; i++) {
 			// If it is not itself
 			if (i != current_thread_info->worker_id) {
-				
+				//Access this worker's queue
 				pthread_mutex_lock(&info->bigpool->thread_info[i - 1].local_lock);
 				if (!list_empty(&info->bigpool->thread_info[i - 1].workerqueue)) {
+					// Found a job to take, and will break out of this loop
 					newTask = list_entry(list_pop_front(&info->bigpool->thread_info[i - 1].workerqueue), struct future, elem);
 					newTask->mylist = -1;
 					pthread_mutex_unlock(&info->bigpool->thread_info[i - 1].local_lock);
@@ -153,6 +151,7 @@ static void *thread_helper(struct thread_local_info * info)
 	if (newTask->task == NULL) {
 		return NULL;
 	}
+	// Update values
 	pthread_mutex_lock(&newTask->mutex);
 	newTask->elem.next = NULL;
 	newTask->elem.prev = NULL;
@@ -172,6 +171,7 @@ static void *thread_helper(struct thread_local_info * info)
  * The thread function for each worker */ 
 static void *worker(void *vargp)
 {
+	// value to see if the worker needs to stop
 	int shutdown;
 	current_thread_info = (struct thread_local_info *)vargp;
 	while (1) {
@@ -180,7 +180,7 @@ static void *worker(void *vargp)
 		
 		pthread_mutex_lock(&current_thread_info->bigpool->lock);
 		shutdown = current_thread_info->bigpool->is_shutdown;
-		
+		// check the shutdown value to see if the worker is stopping
 		if (shutdown == 0) {
 			pthread_mutex_unlock(&current_thread_info->bigpool->lock);
 			thread_helper(current_thread_info);
@@ -215,8 +215,10 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 	pthread_mutex_lock(&pool->lock);
 	pool->is_shutdown = 1;
 	pthread_mutex_unlock(&pool->lock);
+	// Post for every worker
 	for (; j < totalThreads; j++)
 	{
+		// lets all current threads finish
 		sem_post(&pool->semaphore);
 	}
 	int i = 0;
@@ -226,7 +228,6 @@ void thread_pool_shutdown_and_destroy(struct thread_pool * pool)
 		pthread_join(pool->thread_info[i].thread, NULL);
 	}
 	// All workers freed
-	// free the worker list
 	free(pool->thread_info);
 	// All that's left is the pool.
 	free(pool);
@@ -338,13 +339,3 @@ void future_free(struct future * givenFuture)
 		free(oldFuture);
 	}
 }
-
-/* Returns true if ELEM is an interior element,
-   false otherwise. */
-static inline bool
-is_interior (struct list_elem *elem)
-{
-  return elem != NULL && elem->prev != NULL && elem->next != NULL;
-}
-
-
