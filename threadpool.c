@@ -311,10 +311,6 @@ void * future_get(struct future * givenFuture)
 				pthread_mutex_unlock(&givenFuture->mutex);
 				// Pass value's into the task and get the result. Update value "result"
 				givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
-				pthread_mutex_lock(&givenFuture->mutex);
-				pthread_mutex_unlock(&givenFuture->mutex);
-				sem_post(&givenFuture->signal);
-				sem_wait(&givenFuture->signal);
 			}
 			else {
 				// The future was taken, so wait
