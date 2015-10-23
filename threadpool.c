@@ -22,7 +22,6 @@ struct thread_pool{
 	struct thread_local_info *thread_info; /* An array of worker threads' info */
 	sem_t semaphore;			/* Semaphore fo the threadpool */
 	int is_shutdown;			/* A flag to denote when the threadpool is shut down */
-	/* Additional menbers may be needed */
 };
 
 
@@ -36,7 +35,7 @@ struct future{
 									-1 if it is not in a list
 									0 if it in global queue
 									positive numbers represent worker_id otherwise */
-	sem_t signal;
+	sem_t signal;				/* The signal of thre result */
 };
 
 /*
