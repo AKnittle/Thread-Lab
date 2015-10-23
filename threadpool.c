@@ -293,40 +293,47 @@ void * future_get(struct future * givenFuture)
 		pthread_mutex_lock(&givenFuture->mutex);
 		int myList = givenFuture->mylist;
 		// The given future is still pending
+		// Check to see if this future is in a worker's list
 		if (myList > 0) {
-			// Remove this future from its list when trying to executing it
-					
+			// Remove this future from its list when trying to executing it		
 			pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+			// Double check to see if the future is STILL in the list
 			if (givenFuture->mylist > 0) {
-			list_remove(&givenFuture->elem);
-			givenFuture->mylist = -1;
-			pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
+				list_remove(&givenFuture->elem);
+				// The Future is being removed from the list so update it's position
+				givenFuture->mylist = -1;
+				pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 			
-			givenFuture->elem.next = NULL;
-			givenFuture->elem.prev = NULL;
-
-			fork_join_task_t task = givenFuture->task;
-			pthread_mutex_unlock(&givenFuture->mutex);
-			givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
-			pthread_mutex_lock(&givenFuture->mutex);
-			pthread_mutex_unlock(&givenFuture->mutex);
-			sem_post(&givenFuture->signal);
-			sem_wait(&givenFuture->signal);
+				givenFuture->elem.next = NULL;
+				givenFuture->elem.prev = NULL;
+				// get the future's task
+				fork_join_task_t task = givenFuture->task;
+				pthread_mutex_unlock(&givenFuture->mutex);
+				// Pass value's into the task and get the result. Update value "result"
+				givenFuture->result = task(current_thread_info->bigpool, givenFuture->data);
+				pthread_mutex_lock(&givenFuture->mutex);
+				pthread_mutex_unlock(&givenFuture->mutex);
+				sem_post(&givenFuture->signal);
+				sem_wait(&givenFuture->signal);
 			}
 			else {
+				// The future was taken, so wait
 				pthread_mutex_unlock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 				pthread_mutex_unlock(&givenFuture->mutex);
 				sem_wait(&givenFuture->signal);
 			}
 		}
 		else {
+			// Not in a worker's queue so wait.
 			pthread_mutex_unlock(&givenFuture->mutex);
 			sem_wait(&givenFuture->signal);
 		}
 	}
-	else { 
+	else {
+		// Was the main thread so wait 
 		sem_wait(&givenFuture->signal);
 	}
+	// Return the result from task
 	return givenFuture->result;
 }
 
@@ -334,6 +341,7 @@ void * future_get(struct future * givenFuture)
 /* Deallocate this future.  Must be called after future_get() */
 void future_free(struct future * givenFuture)
 {
+	// Simply deallocate the future
 	if (givenFuture != NULL) {
 		struct future *oldFuture = givenFuture;
 		free(oldFuture);
