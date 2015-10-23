@@ -331,6 +331,7 @@ void * future_get(struct future * givenFuture)
 			pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 			if (!is_interior (&givenFuture->elem)) {
 				sem_wait(&givenFuture->signal);
+				pthread_mutex_lock(&current_thread_info->bigpool->thread_info[myList - 1].local_lock);
 				return givenFuture->result;
 			}
 			//printf("336: List size is %d\n", (int)list_size (&current_thread_info->bigpool->thread_info[myList - 1].workerqueue));
