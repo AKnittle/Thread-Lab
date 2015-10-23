@@ -19,7 +19,6 @@ struct thread_pool{
 	int N;						/* Number of workers in the threadpool */
 	pthread_mutex_t lock;		/* Mutex for the threadpool*/
 	struct list subdeque;			/* Global task list */
-	//pthread_t *threads;			/* An array of worker threads' tids */
 	struct thread_local_info *thread_info; /* An array of worker threads' info */
 	sem_t semaphore;			/* Semaphore fo the threadpool */
 	int is_shutdown;			/* A flag to denote when the threadpool is shut down */
